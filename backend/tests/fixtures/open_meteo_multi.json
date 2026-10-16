@@ -1,0 +1,28 @@
+[
+  {
+    "latitude": 39.75, "longitude": -105.0, "timezone": "GMT",
+    "hourly": {
+      "time": ["2026-10-20T08:00", "2026-10-20T09:00", "2026-10-20T10:00"],
+      "wind_speed_10m": [10.0, 30.0, 58.0],
+      "wind_gusts_10m": [15.0, 40.0, 70.0],
+      "rain": [0.0, 0.2, null],
+      "showers": [0.0, 0.1, 0.0],
+      "snowfall": [0.0, 0.0, 2.5],
+      "temperature_2m": [50.0, 48.0, 30.0],
+      "weather_code": [0, 61, 75]
+    }
+  },
+  {
+    "latitude": 40.0, "longitude": -106.0, "timezone": "GMT",
+    "hourly": {
+      "time": ["2026-10-20T08:00", "2026-10-20T09:00", "2026-10-20T10:00"],
+      "wind_speed_10m": [5.0, 5.0, 5.0],
+      "wind_gusts_10m": [6.0, 6.0, 6.0],
+      "rain": [0.0, 0.0, 0.0],
+      "showers": [0.0, 0.0, 0.0],
+      "snowfall": [0.0, 0.0, 0.0],
+      "temperature_2m": [60.0, 61.0, 62.0],
+      "weather_code": [1, 1, 1]
+    }
+  }
+]
