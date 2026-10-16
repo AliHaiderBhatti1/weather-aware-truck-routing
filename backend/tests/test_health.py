@@ -28,3 +28,9 @@ def test_health_keeps_cors_headers_for_browsers(api_client: APIClient) -> None:
 def test_other_routes_still_validate_host(api_client: APIClient) -> None:
     response = api_client.get("/api/docs/", HTTP_HOST="evil.example.com")
     assert response.status_code == 400
+
+
+def test_root_redirects_to_api_docs(api_client: APIClient) -> None:
+    response = api_client.get("/")
+    assert response.status_code == 302
+    assert response["Location"] == "/api/docs/"
