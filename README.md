@@ -7,8 +7,8 @@ every route option and scoring wind, rain and snow against the load.
 
 | | |
 |---|---|
-| Live app | _add Vercel URL_ |
-| API | _add Vercel API URL_ (`/api/docs/` for Swagger) |
+| Live app | https://weather-aware-truck-routing-ny89.vercel.app |
+| API | https://weather-aware-truck-routing-woad.vercel.app (root opens the Swagger docs) |
 | Walkthrough | _add Loom URL_ |
 
 ![App screenshot: three routes, risk-coloured checkpoints and the 48 h corridor heatmap](docs/screenshot.png)
