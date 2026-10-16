@@ -108,6 +108,8 @@ USE_TZ = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # Opt-in: hosting platforms terminate TLS and forward the proto header.
 SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", False)
+# Platform health probes call the container over plain HTTP.
+SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 
