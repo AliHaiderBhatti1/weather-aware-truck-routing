@@ -11,7 +11,7 @@ every route option and scoring wind, rain and snow against the load.
 | API | _add Render URL_ (`/api/docs/` for Swagger) |
 | Walkthrough | _add Loom URL_ |
 
-![Screenshot placeholder](docs/screenshot.png)
+![App screenshot: three routes, risk-coloured checkpoints and the 48 h corridor heatmap](docs/screenshot.png)
 
 ---
 
