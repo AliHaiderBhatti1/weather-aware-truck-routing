@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { AppHeader } from '@/components/AppHeader'
+import { MobileTabs, type MobileView } from '@/components/MobileTabs'
 import { Alert, Card } from '@/components/ui'
 import { ApiStatusBanner } from '@/features/health/ApiStatusBanner'
 import { ForecastSlider } from '@/features/heatmap/ForecastSlider'
@@ -13,6 +14,7 @@ import { TripForm } from '@/features/trip-form/TripForm'
 import { TripSummary } from '@/features/trip-form/TripSummary'
 import { usePlan, usePlanTrip } from '@/features/trip-form/usePlanTrip'
 import { usePlanningProgress } from '@/features/trip-form/usePlanningProgress'
+import { cn } from '@/lib/cn'
 import { toDateTimeLocal } from '@/lib/format'
 import type { TripPlan } from '@/lib/types'
 import { readPlanIdFromUrl, writePlanIdToUrl } from '@/lib/url'
@@ -23,6 +25,7 @@ export default function App() {
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null)
   const [hour, setHour] = useState(0)
   const [heatmapVisible, setHeatmapVisible] = useState(true)
+  const [mobileView, setMobileView] = useState<MobileView>('plan')
 
   const planQuery = usePlan(planId)
   const plan: TripPlan | null = planQuery.data ?? null
@@ -32,6 +35,7 @@ export default function App() {
     writePlanIdToUrl(created.id)
     setEditing(false)
     setSelectedRouteId(created.recommended_route_id ?? created.routes[0]?.id ?? null)
+    setMobileView('map')
   }, [])
   const planMutation = usePlanTrip(onPlanned)
   const heatmapQuery = useHeatmap(plan?.id ?? null)
@@ -43,6 +47,7 @@ export default function App() {
     setEditing(false)
     setSelectedRouteId(null)
     setHour(0)
+    setMobileView('plan')
   }
 
   const editDefaults = plan
@@ -76,10 +81,15 @@ export default function App() {
 
   return (
     <div className="flex h-dvh flex-col lg:flex-row">
-      <aside className="flex w-full shrink-0 flex-col border-b border-slate-200 bg-white lg:h-full lg:w-[440px] lg:border-r lg:border-b-0">
+      <aside
+        className={cn(
+          'w-full shrink-0 flex-col bg-white lg:flex lg:h-full lg:w-[440px] lg:border-r lg:border-slate-200',
+          mobileView === 'map' ? 'hidden' : 'flex min-h-0 flex-1 lg:flex-none',
+        )}
+      >
         <AppHeader />
         <ApiStatusBanner />
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-slate-50/60 p-4">
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-slate-50/60 p-4 pb-20 lg:pb-4">
           {showForm ? (
             <Card className="p-4">
               <TripForm
@@ -110,7 +120,13 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="relative min-h-[55dvh] flex-1 lg:min-h-0" aria-label="Map">
+      <main
+        className={cn(
+          'relative min-h-0 flex-1',
+          mobileView === 'plan' ? 'hidden lg:block' : 'block',
+        )}
+        aria-label="Map"
+      >
         <MapView
           plan={plan}
           selectedRouteId={selectedRouteId}
@@ -123,11 +139,11 @@ export default function App() {
             ) : null
           }
         />
-        <div className="pointer-events-none absolute top-3 left-3 z-10 hidden md:block">
+        <div className="pointer-events-none absolute top-3 left-3 z-10 hidden md:block [@media(max-height:520px)]:hidden">
           <MapLegend />
         </div>
         {plan && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center px-3 lg:bottom-8">
+          <div className="pointer-events-none absolute inset-x-0 bottom-[72px] z-10 flex justify-center px-3 lg:bottom-8">
             <ForecastSlider
               plan={plan}
               selectedRoute={selectedRoute}
@@ -160,6 +176,11 @@ export default function App() {
           </div>
         )}
       </main>
+      <MobileTabs
+        view={mobileView}
+        onChange={setMobileView}
+        routeCount={plan?.routes.length ?? 0}
+      />
     </div>
   )
 }

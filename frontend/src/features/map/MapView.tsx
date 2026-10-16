@@ -71,7 +71,15 @@ export function MapView({
 
   const fitToPlan = useCallback(() => {
     if (!plan || !mapRef.current) return
-    mapRef.current.fitBounds(plan.bounds, { padding: FIT_PADDING, duration: 900, maxZoom: 11 })
+    const map = mapRef.current.getMap()
+    const { clientWidth, clientHeight } = map.getContainer()
+    if (clientWidth < 50 || clientHeight < 50) return // hidden; wait for the resize event
+    const compact = clientWidth < 640
+    mapRef.current.fitBounds(plan.bounds, {
+      padding: compact ? { top: 40, right: 24, bottom: 120, left: 24 } : FIT_PADDING,
+      duration: 900,
+      maxZoom: 11,
+    })
   }, [plan])
 
   useEffect(() => {
@@ -122,6 +130,9 @@ export function MapView({
       initialViewState={US_VIEW}
       style={{ width: '100%', height: '100%' }}
       onLoad={fitToPlan}
+      // The map can be hidden (phone tab) or resized after the fit; refit so the
+      // trip is always framed when it becomes visible.
+      onResize={fitToPlan}
       interactiveLayerIds={data ? [CHECKPOINTS.id!, ROUTES_HIT_LAYER.id!] : []}
       onMouseMove={onMouseMove}
       onMouseLeave={() => setHover(null)}

@@ -164,9 +164,10 @@ class TripPlanner:
     def _warnings(routes: list[Route], assessed: dict[str, list[AssessedCheckpoint]]) -> list[str]:
         warnings: list[str] = []
         if len(routes) < 3:
+            count = len(routes)
             warnings.append(
-                f"Only {len(routes)} distinct route{'s' if len(routes) != 1 else ''} "
-                "exist between these places."
+                f"Only {count} distinct route{'s exist' if count != 1 else ' exists'} "
+                "between these places."
             )
         missing = sum(1 for items in assessed.values() for item in items if item.weather is None)
         if missing:

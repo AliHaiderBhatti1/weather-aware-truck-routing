@@ -72,7 +72,7 @@ def test_heavy_load_turns_severe_wind_into_no_travel_and_blocks_recommendation()
     assert plan["routes"][0]["summary"]["no_travel_miles"] == 50.0
     assert plan["routes"][0]["checkpoints"][0]["risk"]["applied_rule"].startswith("Wind 45-54 mph")
     assert any("No-Travel" in w for w in plan["warnings"])
-    assert any("Only 1 distinct route" in w for w in plan["warnings"])
+    assert any("Only 1 distinct route exists" in w for w in plan["warnings"])
 
 
 def test_missing_weather_is_reported_and_excluded_from_totals() -> None:
