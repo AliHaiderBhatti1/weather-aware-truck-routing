@@ -1,10 +1,16 @@
-import { ArrowRight, CalendarClock, Pencil, Weight } from 'lucide-react'
+import { ArrowRight, CalendarClock, Pencil, RotateCcw, Weight } from 'lucide-react'
 
 import { Button } from '@/components/ui'
 import { formatDayTime, formatPounds } from '@/lib/format'
 import type { TripPlan } from '@/lib/types'
 
-export function TripSummary({ plan, onEdit }: { plan: TripPlan; onEdit: () => void }) {
+interface TripSummaryProps {
+  plan: TripPlan
+  onEdit: () => void
+  onReset: () => void
+}
+
+export function TripSummary({ plan, onEdit, onReset }: TripSummaryProps) {
   const { origin, destination, departure_time, load_weight_lb, checkpoint_interval_miles } =
     plan.request
   return (
@@ -25,14 +31,25 @@ export function TripSummary({ plan, onEdit }: { plan: TripPlan; onEdit: () => vo
           <span>every {checkpoint_interval_miles} mi</span>
         </p>
       </div>
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={onEdit}
-        leftIcon={<Pencil className="h-3 w-3" />}
-      >
-        Edit
-      </Button>
+      <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onEdit}
+          leftIcon={<Pencil className="h-3 w-3" />}
+        >
+          Edit
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onReset}
+          leftIcon={<RotateCcw className="h-3 w-3" />}
+          title="Clear this plan and start over"
+        >
+          New trip
+        </Button>
+      </div>
     </div>
   )
 }

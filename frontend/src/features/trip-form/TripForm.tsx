@@ -17,6 +17,8 @@ interface TripFormProps {
   pending: boolean
   error: unknown
   defaultValues?: Partial<TripFormValues>
+  /** Shown when editing an existing plan; returns to the summary without changes. */
+  onCancel?: () => void
 }
 
 const EXAMPLE_TRIP: Pick<TripFormValues, 'origin' | 'destination' | 'loadWeightLb'> = {
@@ -41,7 +43,7 @@ function defaultDeparture(): string {
   return toDateTimeLocal(date)
 }
 
-export function TripForm({ onSubmit, pending, error, defaultValues }: TripFormProps) {
+export function TripForm({ onSubmit, pending, error, defaultValues, onCancel }: TripFormProps) {
   const form = useForm<TripFormValues>({
     resolver: zodResolver(tripFormSchema),
     defaultValues: {
@@ -201,9 +203,22 @@ export function TripForm({ onSubmit, pending, error, defaultValues }: TripFormPr
         <Alert tone="error" title="Something went wrong while planning the trip." />
       ) : null}
 
-      <Button type="submit" size="lg" loading={pending} leftIcon={<Route className="h-4 w-4" />}>
-        {pending ? 'Planning routes…' : 'Plan routes'}
-      </Button>
+      <div className="flex gap-2">
+        {onCancel && (
+          <Button type="button" variant="secondary" size="lg" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
+        <Button
+          type="submit"
+          size="lg"
+          loading={pending}
+          leftIcon={<Route className="h-4 w-4" />}
+          className="flex-1"
+        >
+          {pending ? 'Planning routes…' : onCancel ? 'Re-plan routes' : 'Plan routes'}
+        </Button>
+      </div>
       <button
         type="button"
         onClick={fillExample}

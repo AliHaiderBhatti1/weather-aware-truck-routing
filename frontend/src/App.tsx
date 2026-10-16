@@ -13,6 +13,7 @@ import { TripForm } from '@/features/trip-form/TripForm'
 import { TripSummary } from '@/features/trip-form/TripSummary'
 import { usePlan, usePlanTrip } from '@/features/trip-form/usePlanTrip'
 import { usePlanningProgress } from '@/features/trip-form/usePlanningProgress'
+import { toDateTimeLocal } from '@/lib/format'
 import type { TripPlan } from '@/lib/types'
 import { readPlanIdFromUrl, writePlanIdToUrl } from '@/lib/url'
 
@@ -34,6 +35,28 @@ export default function App() {
   }, [])
   const planMutation = usePlanTrip(onPlanned)
   const heatmapQuery = useHeatmap(plan?.id ?? null)
+
+  const resetTrip = () => {
+    planMutation.reset()
+    setPlanId(null)
+    writePlanIdToUrl(null)
+    setEditing(false)
+    setSelectedRouteId(null)
+    setHour(0)
+  }
+
+  const editDefaults = plan
+    ? {
+        origin: { ...plan.request.origin, full_name: plan.request.origin.full_name },
+        destination: {
+          ...plan.request.destination,
+          full_name: plan.request.destination.full_name,
+        },
+        departure: toDateTimeLocal(new Date(plan.request.departure_time)),
+        loadWeightLb: plan.request.load_weight_lb,
+        intervalMiles: plan.request.checkpoint_interval_miles,
+      }
+    : undefined
   const progress = usePlanningProgress(planMutation.isPending)
   const selectedRoute = plan?.routes.find((r) => r.id === selectedRouteId) ?? null
 
@@ -63,10 +86,12 @@ export default function App() {
                 onSubmit={planMutation.mutate}
                 pending={planMutation.isPending}
                 error={planMutation.error}
+                defaultValues={editing ? editDefaults : undefined}
+                onCancel={editing && plan ? () => setEditing(false) : undefined}
               />
             </Card>
           ) : (
-            <TripSummary plan={plan} onEdit={() => setEditing(true)} />
+            <TripSummary plan={plan} onEdit={() => setEditing(true)} onReset={resetTrip} />
           )}
 
           {planQuery.isError && (
