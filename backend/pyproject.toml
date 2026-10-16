@@ -1,0 +1,45 @@
+[project]
+name = "weather-aware-truck-routing-api"
+version = "1.0.0"
+description = "Django API that plans truck routes and scores them against forecast weather risk."
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["migrations", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF", "C4", "PL"]
+ignore = ["PLR2004", "PLR0913", "RUF012"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLR2004", "S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+strict = true
+warn_unreachable = true
+exclude = ["migrations", ".venv"]
+
+[[tool.mypy.overrides]]
+module = ["dj_database_url", "respx", "freezegun"]
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "config.settings"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+filterwarnings = ["error::DeprecationWarning:apps.*"]
+
+[tool.coverage.run]
+source = ["apps"]
+omit = ["*/migrations/*"]
