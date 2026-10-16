@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+from typing import Any
+
 from django.conf import settings
-from drf_spectacular.utils import extend_schema
+from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import OpenApiResponse, extend_schema
+from rest_framework import status
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from apps.trips.models import TripPlan
+from apps.trips.serializers import TripPlanRequestSerializer
+from apps.trips.services.heatmap import build_heatmap
+from apps.trips.services.planner import PlanRequest, TripPlanner
 
 
 class HealthView(APIView):
@@ -24,3 +33,51 @@ class HealthView(APIView):
                 },
             }
         )
+
+
+def _plan_payload(plan: TripPlan) -> dict[str, Any]:
+    return {"id": str(plan.id), "created_at": plan.created_at.isoformat(), **plan.result}
+
+
+class TripPlanCreateView(APIView):
+    """Plan a trip: 3 routes, weather at every checkpoint, risk and a recommendation."""
+
+    @extend_schema(
+        request=TripPlanRequestSerializer,
+        responses={201: OpenApiResponse(description="The computed trip plan")},
+    )
+    def post(self, request: Request) -> Response:
+        serializer = TripPlanRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        planner = TripPlanner()
+        plan_request = PlanRequest(
+            origin=planner.resolve_place(data["origin"]),
+            destination=planner.resolve_place(data["destination"]),
+            departure=data["departure_time"].replace(microsecond=0),
+            load_lb=data["load_weight_lb"],
+            interval_miles=data["checkpoint_interval_miles"],
+        )
+        result = planner.plan(plan_request)
+        plan = TripPlan.objects.create(request=result["request"], result=result)
+        return Response(_plan_payload(plan), status=status.HTTP_201_CREATED)
+
+
+class TripPlanDetailView(APIView):
+    @extend_schema(responses={200: OpenApiResponse(description="A previously computed plan")})
+    def get(self, request: Request, plan_id: str) -> Response:
+        plan = get_object_or_404(TripPlan, pk=plan_id)
+        return Response(_plan_payload(plan))
+
+
+class TripPlanHeatmapView(APIView):
+    """0-48 h corridor heatmap for a plan, computed on first request and stored."""
+
+    @extend_schema(responses={200: OpenApiResponse(description="Hourly risk grid")})
+    def get(self, request: Request, plan_id: str) -> Response:
+        plan = get_object_or_404(TripPlan, pk=plan_id)
+        if plan.heatmap is None:
+            plan.heatmap = build_heatmap(plan.result)
+            plan.save(update_fields=["heatmap"])
+        return Response(plan.heatmap)

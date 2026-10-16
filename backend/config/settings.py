@@ -141,6 +141,7 @@ MAPBOX_ACCESS_TOKEN = os.getenv("MAPBOX_ACCESS_TOKEN", "")
 MAPBOX_BASE_URL = os.getenv("MAPBOX_BASE_URL", "https://api.mapbox.com")
 OPEN_METEO_BASE_URL = os.getenv("OPEN_METEO_BASE_URL", "https://api.open-meteo.com/v1/forecast")
 UPSTREAM_TIMEOUT_SECONDS = float(os.getenv("UPSTREAM_TIMEOUT_SECONDS", "20"))
+OPEN_METEO_TIMEOUT_SECONDS = float(os.getenv("OPEN_METEO_TIMEOUT_SECONDS", "30"))
 
 # Cache lifetimes (seconds)
 GEOCODE_CACHE_TTL = 24 * 60 * 60

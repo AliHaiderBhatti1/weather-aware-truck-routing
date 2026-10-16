@@ -77,6 +77,8 @@ def api_exception_handler(exc: Exception, context: dict[str, Any]) -> Response |
     else:
         message = "Request failed."
         details = data
-    code = getattr(exc, "default_code", "error")
+    # Django's Http404 / PermissionDenied are converted by DRF but keep no default_code.
+    fallback = {404: "not_found", 403: "permission_denied"}.get(response.status_code, "error")
+    code = getattr(exc, "default_code", None) or fallback
     response.data = _error_payload(str(code), message, details)
     return response

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
 
@@ -32,7 +33,9 @@ HOURLY_FIELDS = (
     "temperature_2m",
     "weather_code",
 )
-MAX_LOCATIONS_PER_REQUEST = 60
+MAX_LOCATIONS_PER_REQUEST = 20
+MAX_CONCURRENT_REQUESTS = 6
+RETRIES_ON_TIMEOUT = 1
 
 
 class OpenMeteoClient:
@@ -43,19 +46,44 @@ class OpenMeteoClient:
         http: httpx.Client | None = None,
     ) -> None:
         self._base_url = base_url or settings.OPEN_METEO_BASE_URL
-        self._http = http or httpx.Client(timeout=timeout or settings.UPSTREAM_TIMEOUT_SECONDS)
+        self._http = http or httpx.Client(timeout=timeout or settings.OPEN_METEO_TIMEOUT_SECONDS)
 
     def hourly(
         self, points: Sequence[GeoPoint], start: datetime, end: datetime
     ) -> list[HourlySeries]:
-        """Hourly series for every point between ``start`` and ``end`` (inclusive hours, UTC)."""
+        """
+        Hourly series for every point between ``start`` and ``end`` (inclusive hours, UTC).
+
+        Points are split into small chunks fetched concurrently: Open-Meteo's
+        latency grows roughly linearly with the number of locations per call.
+        """
         if not points:
             return []
-        series: list[HourlySeries] = []
-        for offset in range(0, len(points), MAX_LOCATIONS_PER_REQUEST):
-            chunk = points[offset : offset + MAX_LOCATIONS_PER_REQUEST]
-            series.extend(self._fetch_chunk(chunk, start, end))
-        return series
+        chunks = [
+            points[offset : offset + MAX_LOCATIONS_PER_REQUEST]
+            for offset in range(0, len(points), MAX_LOCATIONS_PER_REQUEST)
+        ]
+        if len(chunks) == 1:
+            return self._fetch_chunk_with_retry(chunks[0], start, end)
+        workers = min(MAX_CONCURRENT_REQUESTS, len(chunks))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(
+                pool.map(lambda chunk: self._fetch_chunk_with_retry(chunk, start, end), chunks)
+            )
+        return [series for chunk_series in results for series in chunk_series]
+
+    def _fetch_chunk_with_retry(
+        self, points: Sequence[GeoPoint], start: datetime, end: datetime
+    ) -> list[HourlySeries]:
+        attempt = 0
+        while True:
+            try:
+                return self._fetch_chunk(points, start, end)
+            except UpstreamError as exc:
+                attempt += 1
+                if attempt > RETRIES_ON_TIMEOUT or "Timeout" not in exc.message:
+                    raise
+                logger.info("Open-Meteo timed out; retrying chunk of %d points", len(points))
 
     def _fetch_chunk(
         self, points: Sequence[GeoPoint], start: datetime, end: datetime

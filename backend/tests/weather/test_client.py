@@ -66,6 +66,7 @@ def test_single_location_object_response_is_accepted() -> None:
 @respx.mock
 def test_requests_are_chunked(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(client_module, "MAX_LOCATIONS_PER_REQUEST", 2)
+    monkeypatch.setattr(client_module, "MAX_CONCURRENT_REQUESTS", 1)
     body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())
     route = respx.get(URL).mock(
         side_effect=[
@@ -97,10 +98,21 @@ def test_location_count_mismatch_is_rejected() -> None:
 
 
 @respx.mock
-def test_timeout_is_an_upstream_error() -> None:
-    respx.get(URL).mock(side_effect=httpx.ReadTimeout("slow"))
+def test_timeout_is_retried_once_then_raised() -> None:
+    route = respx.get(URL).mock(side_effect=httpx.ReadTimeout("slow"))
     with pytest.raises(UpstreamError, match="ReadTimeout"):
         _client().hourly(POINTS, START, END)
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_timeout_then_success_recovers() -> None:
+    body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())
+    route = respx.get(URL).mock(
+        side_effect=[httpx.ReadTimeout("slow"), httpx.Response(200, json=body)]
+    )
+    assert len(_client().hourly(POINTS, START, END)) == 2
+    assert route.call_count == 2
 
 
 def test_empty_points_short_circuit() -> None:
