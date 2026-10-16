@@ -9,7 +9,7 @@ import pytest
 import respx
 
 from apps.geo.types import GeoPoint
-from apps.trips.exceptions import UpstreamError
+from apps.trips.exceptions import RateLimitedError, UpstreamError
 from apps.weather import client as client_module
 from apps.weather.client import OpenMeteoClient
 
@@ -117,3 +117,24 @@ def test_timeout_then_success_recovers() -> None:
 
 def test_empty_points_short_circuit() -> None:
     assert _client().hourly([], START, END) == []
+
+
+@respx.mock
+def test_rate_limit_is_retried_once_then_surfaces_as_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(client_module, "RETRY_AFTER_RATE_LIMIT_SECONDS", 0)
+    route = respx.get(URL).mock(
+        return_value=httpx.Response(429, json={"reason": "Minutely API request limit exceeded"})
+    )
+    with pytest.raises(RateLimitedError) as info:
+        _client().hourly(POINTS, START, END)
+    assert route.call_count == 2
+    assert info.value.http_status == 503
+    assert "try again" in info.value.message
+
+
+@respx.mock
+def test_rate_limit_then_success_recovers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(client_module, "RETRY_AFTER_RATE_LIMIT_SECONDS", 0)
+    body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())
+    respx.get(URL).mock(side_effect=[httpx.Response(429, json={}), httpx.Response(200, json=body)])
+    assert len(_client().hourly(POINTS, START, END)) == 2

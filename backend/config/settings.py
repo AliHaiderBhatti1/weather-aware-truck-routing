@@ -154,7 +154,7 @@ WEATHER_CACHE_TTL = 15 * 60
 MAX_ROUTE_DISTANCE_MILES = float(os.getenv("MAX_ROUTE_DISTANCE_MILES", "2500"))
 MAX_DEPARTURE_DAYS_AHEAD = 14
 HEATMAP_FORECAST_HOURS = 48
-HEATMAP_MAX_POINTS = 400
+HEATMAP_MAX_POINTS = 300
 
 # --- Logging ----------------------------------------------------------------
 

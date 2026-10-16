@@ -10,6 +10,7 @@ conversion happens downstream.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -19,7 +20,7 @@ import httpx
 from django.conf import settings
 
 from apps.geo.types import GeoPoint
-from apps.trips.exceptions import UpstreamError
+from apps.trips.exceptions import RateLimitedError, UpstreamError
 from apps.weather.types import HourlySeries
 
 logger = logging.getLogger(__name__)
@@ -33,9 +34,12 @@ HOURLY_FIELDS = (
     "temperature_2m",
     "weather_code",
 )
-MAX_LOCATIONS_PER_REQUEST = 20
-MAX_CONCURRENT_REQUESTS = 6
+# Open-Meteo's latency grows with locations per call, but its free tier is
+# rate-limited per *request*, so fewer, larger calls are the better trade.
+MAX_LOCATIONS_PER_REQUEST = 40
+MAX_CONCURRENT_REQUESTS = 4
 RETRIES_ON_TIMEOUT = 1
+RETRY_AFTER_RATE_LIMIT_SECONDS = 3.0
 
 
 class OpenMeteoClient:
@@ -79,6 +83,12 @@ class OpenMeteoClient:
         while True:
             try:
                 return self._fetch_chunk(points, start, end)
+            except RateLimitedError:
+                attempt += 1
+                if attempt > RETRIES_ON_TIMEOUT:
+                    raise
+                logger.info("Open-Meteo rate limited; retrying chunk after a short pause")
+                time.sleep(RETRY_AFTER_RATE_LIMIT_SECONDS)
             except UpstreamError as exc:
                 attempt += 1
                 if attempt > RETRIES_ON_TIMEOUT or "Timeout" not in exc.message:
@@ -105,6 +115,12 @@ class OpenMeteoClient:
             raise UpstreamError(f"Open-Meteo request failed: {exc.__class__.__name__}") from exc
 
         payload = _safe_json(response)
+        if response.status_code == 429:
+            logger.warning("Open-Meteo rate limit hit")
+            raise RateLimitedError(
+                "The weather service is busy right now. Please try again in a minute.",
+                details={"provider": "open-meteo"},
+            )
         if response.status_code >= 400:
             reason = payload.get("reason") if isinstance(payload, dict) else None
             logger.warning("Open-Meteo -> %s %s", response.status_code, reason)

@@ -83,3 +83,15 @@ def test_end_before_start_is_clamped() -> None:
     client = FakeClient()
     WeatherService(client=client).hourly([GeoPoint(1, 1)], T0 + timedelta(hours=1), T0)  # type: ignore[arg-type]
     assert client.calls[0][1] == client.calls[0][2]
+
+
+def test_duplicate_points_are_fetched_once_but_returned_for_each_request() -> None:
+    client = FakeClient()
+    service = WeatherService(client=client)  # type: ignore[arg-type]
+    shared = GeoPoint(1.0, 1.0)
+
+    series = service.hourly([shared, GeoPoint(2, 2), shared, GeoPoint(1.001, 1.001)], T0, T0)
+
+    assert client.calls == [(2, T0, T0)]  # shared + 1.001 round to the same ~1 km key
+    assert len(series) == 4
+    assert series[0] is series[2]

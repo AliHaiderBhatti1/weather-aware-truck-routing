@@ -41,8 +41,13 @@ class RoutingError(DomainError):
 
 
 class UpstreamError(DomainError):
-    code = "upstream_error"
-    http_status = status.HTTP_502_BAD_GATEWAY
+    code: str = "upstream_error"
+    http_status: int = status.HTTP_502_BAD_GATEWAY
+
+
+class RateLimitedError(UpstreamError):
+    code: str = "rate_limited"
+    http_status: int = status.HTTP_503_SERVICE_UNAVAILABLE
 
 
 class ConfigurationError(DomainError):

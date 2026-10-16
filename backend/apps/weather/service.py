@@ -29,13 +29,16 @@ class WeatherService:
 
         keys = [_cache_key(point, start, end) for point in points]
         cached = cache.get_many(keys)
-        missing = [
-            (key, point) for key, point in zip(keys, points, strict=True) if key not in cached
-        ]
+        # Routes share endpoints and often long stretches, so de-duplicate by
+        # cache key (coordinates rounded to ~1 km) before calling upstream.
+        missing: dict[str, GeoPoint] = {}
+        for key, point in zip(keys, points, strict=True):
+            if key not in cached and key not in missing:
+                missing[key] = point
 
         if missing:
-            fetched = self._client.hourly([point for _, point in missing], start, end)
-            fresh = {key: series for (key, _), series in zip(missing, fetched, strict=True)}
+            fetched = self._client.hourly(list(missing.values()), start, end)
+            fresh = dict(zip(missing.keys(), fetched, strict=True))
             cache.set_many(fresh, settings.WEATHER_CACHE_TTL)
             cached.update(fresh)
 
