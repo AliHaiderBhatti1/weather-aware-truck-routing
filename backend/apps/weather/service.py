@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from django.conf import settings
 from django.core.cache import cache
@@ -30,6 +30,11 @@ class WeatherService:
         """Hourly series for each point, served from cache when possible."""
         start = _floor_hour(start)
         end = _floor_hour(end)
+        # Open-Meteo rejects windows past its forecast horizon; clamp and let
+        # callers treat the missing hours as "no forecast".
+        horizon = _floor_hour(datetime.now(UTC) + timedelta(days=settings.FORECAST_HORIZON_DAYS))
+        end = min(end, horizon)
+        start = min(start, end)
         end = max(end, start)
 
         keys = [_cache_key(point, start, end) for point in points]

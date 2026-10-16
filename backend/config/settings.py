@@ -151,8 +151,10 @@ WEATHER_CACHE_TTL = 15 * 60
 
 # --- Planning limits --------------------------------------------------------
 
-MAX_ROUTE_DISTANCE_MILES = float(os.getenv("MAX_ROUTE_DISTANCE_MILES", "2500"))
+MAX_ROUTE_DISTANCE_MILES = float(os.getenv("MAX_ROUTE_DISTANCE_MILES", "3500"))
 MAX_DEPARTURE_DAYS_AHEAD = 14
+# Open-Meteo serves hourly forecasts up to 16 days out; stay a little inside that.
+FORECAST_HORIZON_DAYS = 15
 HEATMAP_FORECAST_HOURS = 48
 HEATMAP_MAX_POINTS = 300
 

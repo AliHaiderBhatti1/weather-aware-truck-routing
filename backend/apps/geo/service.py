@@ -23,7 +23,7 @@ from apps.geo.providers.base import GeocodingProvider, RoutingProvider
 from apps.geo.providers.mapbox import MapboxClient
 from apps.geo.sampling import densify
 from apps.geo.types import GeoPoint, Place, Route
-from apps.geo.units import miles_to_meters
+from apps.geo.units import meters_to_miles, miles_to_meters
 from apps.trips.exceptions import GeocodingError, RoutingError, UpstreamError
 
 logger = logging.getLogger(__name__)
@@ -92,8 +92,18 @@ class GeoService:
 
     def route_options(self, origin: GeoPoint, destination: GeoPoint) -> list[Route]:
         """Up to three distinct routes, fastest first."""
-        if origin.distance_to(destination) < 500:
+        straight_line_m = origin.distance_to(destination)
+        if straight_line_m < 500:
             raise RoutingError("Origin and destination are the same place.")
+        limit_miles = settings.MAX_ROUTE_DISTANCE_MILES
+        if straight_line_m > miles_to_meters(limit_miles):
+            # Road distance is never shorter than the great-circle distance, so
+            # this rejects intercontinental pairs without an upstream call.
+            raise RoutingError(
+                f"Trips longer than {limit_miles:,.0f} miles are not supported "
+                f"(these places are {meters_to_miles(straight_line_m):,.0f} miles apart).",
+                details={"straight_line_miles": round(meters_to_miles(straight_line_m))},
+            )
 
         # Mapbox rarely returns three alternatives, so the toll-free and
         # motorway-free variants are requested concurrently with the primary
@@ -122,9 +132,9 @@ class GeoService:
         routes = routes[:TARGET_ROUTE_COUNT]
         longest_allowed = miles_to_meters(settings.MAX_ROUTE_DISTANCE_MILES)
         if routes[0].distance_m > longest_allowed:
-            limit = settings.MAX_ROUTE_DISTANCE_MILES
             raise RoutingError(
-                f"Trips longer than {limit:.0f} miles are not supported.",
+                f"Trips longer than {limit_miles:,.0f} miles by road are not supported "
+                f"(the fastest route is {routes[0].distance_miles:,.0f} miles).",
                 details={"distance_miles": round(routes[0].distance_miles)},
             )
         return [

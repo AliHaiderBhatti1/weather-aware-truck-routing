@@ -103,3 +103,25 @@ def test_geocode_parsing() -> None:
     assert places[0].point == GeoPoint(39.7392, -104.9847)
     assert places[1].point == GeoPoint(40.0, -83.0)  # falls back to geometry
     assert places[1].kind == "street"
+
+
+@respx.mock
+def test_mapbox_422_is_a_routing_error_with_a_friendly_message() -> None:
+    respx.get(url__regex=rf"{BASE}/directions/.*").mock(
+        return_value=httpx.Response(
+            422,
+            json={"message": "Route exceeds maximum distance limitation", "code": "InvalidInput"},
+        )
+    )
+    with pytest.raises(RoutingError, match="too long") as info:
+        _client().routes(GeoPoint(28.6, 77.2), GeoPoint(40.8, -111.9))
+    assert info.value.http_status == 422
+
+
+@respx.mock
+def test_no_segment_explains_that_no_road_is_nearby() -> None:
+    respx.get(url__regex=rf"{BASE}/directions/.*").mock(
+        return_value=httpx.Response(200, json={"code": "NoSegment", "routes": []})
+    )
+    with pytest.raises(RoutingError, match="road near"):
+        _client().routes(GeoPoint(30, -140), GeoPoint(34, -118))

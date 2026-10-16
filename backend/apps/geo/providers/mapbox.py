@@ -41,6 +41,10 @@ class MapboxClient:
             body = _safe_json(response)
             message = body.get("message") if isinstance(body, dict) else None
             logger.warning("Mapbox %s -> %s %s", path, response.status_code, message)
+            if response.status_code == 422:
+                # Invalid input for the routing engine (too far, unroutable area...)
+                # is the caller's problem, not an outage.
+                raise RoutingError(_friendly_routing_message(message), details={"message": message})
             raise UpstreamError(
                 f"Mapbox returned HTTP {response.status_code}",
                 details={"message": message} if message else None,
@@ -105,9 +109,15 @@ class MapboxClient:
         data = self._get(f"/directions/v5/mapbox/driving/{coords}", params)
         code = data.get("code")
         if code != "Ok":
-            if code in {"NoRoute", "NoSegment"}:
+            if code == "NoSegment":
                 raise RoutingError(
-                    "No driveable route found between those places.", details={"code": code}
+                    "Could not find a road near the origin or destination. "
+                    "Pick a point on land close to a road.",
+                    details={"code": code},
+                )
+            if code == "NoRoute":
+                raise RoutingError(
+                    "No driveable route connects those places.", details={"code": code}
                 )
             raise UpstreamError(f"Mapbox Directions returned {code}", details={"code": code})
 
@@ -150,6 +160,15 @@ def _parse_route(raw: dict[str, Any], index: int, exclude: str | None) -> Route 
         segment_distances_m=distances,
         segment_durations_s=durations,
     )
+
+
+def _friendly_routing_message(message: str | None) -> str:
+    text = (message or "").lower()
+    if "distance" in text:
+        return "That trip is too long to route by road."
+    if "coordinate" in text:
+        return "One of the places has invalid coordinates."
+    return f"The routing service rejected the request: {message or 'invalid input'}."
 
 
 def _safe_json(response: httpx.Response) -> Any:

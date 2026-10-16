@@ -135,3 +135,13 @@ def test_resolve_returns_best_match_or_raises() -> None:
     empty = GeoService(geocoder=FakeGeocoder([]), router=FakeRouter({}))
     with pytest.raises(GeocodingError):
         empty.resolve("nowhere")
+
+
+def test_route_options_rejects_intercontinental_pairs_before_calling_mapbox() -> None:
+    router = FakeRouter({None: [straight_route("a")]})
+    service = GeoService(geocoder=FakeGeocoder([]), router=router)
+    new_delhi, salt_lake = GeoPoint(28.593, 77.189), GeoPoint(40.763, -111.89)
+
+    with pytest.raises(RoutingError, match="miles apart"):
+        service.route_options(new_delhi, salt_lake)
+    assert router.calls == []

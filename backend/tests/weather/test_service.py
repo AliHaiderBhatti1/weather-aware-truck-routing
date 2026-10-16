@@ -98,3 +98,17 @@ def test_duplicate_points_are_fetched_once_but_returned_for_each_request() -> No
     assert client.calls == [(2, T0, T0)]  # shared + 1.001 round to the same ~1 km key
     assert len(series) == 4
     assert series[0] is series[2]
+
+
+def test_window_is_clamped_to_the_forecast_horizon(settings: object) -> None:
+    settings.FORECAST_HORIZON_DAYS = 15  # type: ignore[attr-defined]
+    client = FakeClient()
+    far_start = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) + timedelta(days=14)
+    far_end = far_start + timedelta(days=4)
+
+    WeatherService(client=client).hourly([GeoPoint(1, 1)], far_start, far_end)  # type: ignore[arg-type]
+
+    _, start, end = client.calls[0]
+    assert start == far_start
+    assert end <= datetime.now(UTC) + timedelta(days=15)
+    assert end >= start
