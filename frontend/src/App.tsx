@@ -3,6 +3,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { AppHeader } from '@/components/AppHeader'
 import { Alert, Card } from '@/components/ui'
 import { ApiStatusBanner } from '@/features/health/ApiStatusBanner'
+import { ForecastSlider } from '@/features/heatmap/ForecastSlider'
+import { HeatmapLayer } from '@/features/heatmap/HeatmapLayer'
+import { useHeatmap } from '@/features/heatmap/useHeatmap'
 import { MapLegend } from '@/features/map/MapLegend'
 import { MapView } from '@/features/map/MapView'
 import { RouteList } from '@/features/routes/RouteList'
@@ -16,6 +19,8 @@ export default function App() {
   const [planId, setPlanId] = useState<string | null>(() => readPlanIdFromUrl())
   const [editing, setEditing] = useState(false)
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null)
+  const [hour, setHour] = useState(0)
+  const [heatmapVisible, setHeatmapVisible] = useState(true)
 
   const planQuery = usePlan(planId)
   const plan: TripPlan | null = planQuery.data ?? null
@@ -27,12 +32,15 @@ export default function App() {
     setSelectedRouteId(created.recommended_route_id ?? created.routes[0]?.id ?? null)
   }, [])
   const planMutation = usePlanTrip(onPlanned)
+  const heatmapQuery = useHeatmap(plan?.id ?? null)
+  const selectedRoute = plan?.routes.find((r) => r.id === selectedRouteId) ?? null
 
   // A plan loaded from a shared URL needs a default selection too.
   const [syncedPlanId, setSyncedPlanId] = useState<string | null>(null)
   if (plan && plan.id !== syncedPlanId) {
     setSyncedPlanId(plan.id)
     setSelectedRouteId(plan.recommended_route_id ?? plan.routes[0]?.id ?? null)
+    setHour(0)
   }
 
   useEffect(() => {
@@ -80,11 +88,31 @@ export default function App() {
           plan={plan}
           selectedRouteId={selectedRouteId}
           onSelectRoute={setSelectedRouteId}
-          activeHourIndex={null}
+          onCheckpointClick={setHour}
+          activeHourIndex={plan ? hour : null}
+          underlay={
+            heatmapQuery.data ? (
+              <HeatmapLayer heatmap={heatmapQuery.data} hourIndex={hour} visible={heatmapVisible} />
+            ) : null
+          }
         />
-        <div className="pointer-events-none absolute bottom-8 left-3 z-10 hidden sm:block">
+        <div className="pointer-events-none absolute top-3 left-3 z-10 hidden md:block">
           <MapLegend />
         </div>
+        {plan && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center px-3 lg:bottom-8">
+            <ForecastSlider
+              plan={plan}
+              selectedRoute={selectedRoute}
+              hour={hour}
+              onHourChange={setHour}
+              visible={heatmapVisible}
+              onToggleVisible={() => setHeatmapVisible((v) => !v)}
+              loading={heatmapQuery.isPending}
+              error={heatmapQuery.isError}
+            />
+          </div>
+        )}
         {planMutation.isPending && (
           <div className="absolute inset-x-0 top-3 z-10 flex justify-center">
             <div className="shadow-panel rounded-full bg-slate-900/90 px-4 py-1.5 text-xs font-medium text-white">

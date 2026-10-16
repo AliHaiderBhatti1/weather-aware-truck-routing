@@ -38,7 +38,10 @@ interface MapViewProps {
   plan: TripPlan | null
   selectedRouteId: string | null
   onSelectRoute: (routeId: string) => void
+  onCheckpointClick?: (hourIndex: number) => void
   activeHourIndex: number | null
+  /** Layers rendered beneath the routes (e.g. the corridor heatmap). */
+  underlay?: React.ReactNode
   children?: React.ReactNode
 }
 
@@ -51,7 +54,9 @@ export function MapView({
   plan,
   selectedRouteId,
   onSelectRoute,
+  onCheckpointClick,
   activeHourIndex,
+  underlay,
   children,
 }: MapViewProps) {
   const mapRef = useRef<MapRef>(null)
@@ -97,10 +102,13 @@ export function MapView({
     (event: MapLayerMouseEvent) => {
       const feature = event.features?.[0]
       if (!feature) return
-      const routeId = (feature.properties as { routeId?: string }).routeId
-      if (routeId) onSelectRoute(routeId)
+      const props = feature.properties as { routeId?: string; hourIndex?: number }
+      if (props.routeId) onSelectRoute(props.routeId)
+      if (feature.layer.id === CHECKPOINTS.id && typeof props.hourIndex === 'number') {
+        onCheckpointClick?.(props.hourIndex)
+      }
     },
-    [onSelectRoute],
+    [onSelectRoute, onCheckpointClick],
   )
 
   const origin = plan?.request.origin
@@ -126,6 +134,7 @@ export function MapView({
 
       {data && (
         <>
+          {underlay}
           <Source id="routes" type="geojson" data={data.routes}>
             <Layer {...ROUTES_OTHER_CASING} />
             <Layer {...ROUTES_OTHER} />
