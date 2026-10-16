@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowDownUp, Route } from 'lucide-react'
+import { ArrowDownUp, Route, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 
@@ -17,6 +17,22 @@ interface TripFormProps {
   pending: boolean
   error: unknown
   defaultValues?: Partial<TripFormValues>
+}
+
+const EXAMPLE_TRIP: Pick<TripFormValues, 'origin' | 'destination' | 'loadWeightLb'> = {
+  origin: {
+    name: 'Denver',
+    full_name: 'Denver, Colorado, United States',
+    lat: 39.7392,
+    lon: -104.9847,
+  },
+  destination: {
+    name: 'Salt Lake City',
+    full_name: 'Salt Lake City, Utah, United States',
+    lat: 40.7608,
+    lon: -111.891,
+  },
+  loadWeightLb: 42000,
 }
 
 function defaultDeparture(): string {
@@ -41,6 +57,12 @@ export function TripForm({ onSubmit, pending, error, defaultValues }: TripFormPr
   })
   const { control, register, handleSubmit, formState, getValues, setValue } = form
   const errors = formState.errors
+
+  const fillExample = () => {
+    setValue('origin', EXAMPLE_TRIP.origin, { shouldValidate: true })
+    setValue('destination', EXAMPLE_TRIP.destination, { shouldValidate: true })
+    setValue('loadWeightLb', EXAMPLE_TRIP.loadWeightLb, { shouldValidate: true })
+  }
 
   const swap = () => {
     const origin = getValues('origin')
@@ -176,6 +198,13 @@ export function TripForm({ onSubmit, pending, error, defaultValues }: TripFormPr
       <Button type="submit" size="lg" loading={pending} leftIcon={<Route className="h-4 w-4" />}>
         {pending ? 'Planning routes…' : 'Plan routes'}
       </Button>
+      <button
+        type="button"
+        onClick={fillExample}
+        className="-mt-1 inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800"
+      >
+        <Sparkles className="h-3.5 w-3.5" /> Try an example: Denver → Salt Lake City, 42,000 lb
+      </button>
     </form>
   )
 }

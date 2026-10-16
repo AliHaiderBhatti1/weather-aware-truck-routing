@@ -113,6 +113,17 @@ export default function App() {
             />
           </div>
         )}
+        {!plan && !planMutation.isPending && !planQuery.isPending && (
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 flex -translate-y-1/2 justify-center px-4">
+            <div className="shadow-panel max-w-sm rounded-2xl border border-slate-200 bg-white/90 p-5 text-center backdrop-blur">
+              <p className="text-sm font-semibold text-slate-900">Plan a trip to see routes here</p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                Three route options, weather sampled at the truck's ETA along each one, risk scored
+                against your load, and a 48-hour corridor heatmap.
+              </p>
+            </div>
+          </div>
+        )}
         {planMutation.isPending && (
           <div className="absolute inset-x-0 top-3 z-10 flex justify-center">
             <div className="shadow-panel rounded-full bg-slate-900/90 px-4 py-1.5 text-xs font-medium text-white">
