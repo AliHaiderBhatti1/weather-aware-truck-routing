@@ -162,4 +162,9 @@ LOGGING = {
     "formatters": {"plain": {"format": "%(levelname)s %(asctime)s %(name)s: %(message)s"}},
     "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "plain"}},
     "root": {"handlers": ["console"], "level": os.getenv("LOG_LEVEL", "INFO")},
+    # httpx logs full request URLs (including access tokens) at INFO; keep it quiet.
+    "loggers": {
+        "httpx": {"level": "WARNING"},
+        "httpcore": {"level": "WARNING"},
+    },
 }

@@ -1,5 +1,9 @@
-from django.urls import URLPattern
+from django.urls import path
+
+from apps.geo import views
 
 app_name = "geo"
 
-urlpatterns: list[URLPattern] = []
+urlpatterns = [
+    path("geocode/", views.GeocodeView.as_view(), name="geocode"),
+]

@@ -1,0 +1,20 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [-104.9847, 39.7392]},
+      "properties": {
+        "name": "Denver",
+        "full_address": "Denver, Colorado, United States",
+        "feature_type": "place",
+        "coordinates": {"longitude": -104.9847, "latitude": 39.7392}
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [-83.0, 40.0]},
+      "properties": {"name": "Denver Avenue", "place_formatted": "Columbus, Ohio", "feature_type": "street"}
+    }
+  ]
+}
