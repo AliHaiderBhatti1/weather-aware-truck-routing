@@ -70,7 +70,7 @@ def test_route_options_returns_provider_routes_when_three_available() -> None:
     routes = service.route_options(ORIGIN, DEST)
 
     assert [r.id for r in routes] == ["route-1", "route-2", "route-3"]
-    assert router.calls == [None]
+    assert set(router.calls) == {None, "toll", "motorway"}  # fetched concurrently
 
 
 def test_route_options_tops_up_with_exclusions_and_drops_duplicates() -> None:
@@ -84,7 +84,7 @@ def test_route_options_tops_up_with_exclusions_and_drops_duplicates() -> None:
 
     routes = service.route_options(ORIGIN, DEST)
 
-    assert router.calls == [None, "toll", "motorway"]
+    assert set(router.calls) == {None, "toll", "motorway"}
     assert [r.source for r in routes] == ["fastest", "no-motorway"]
     assert routes[1].name.endswith("(Avoids motorways)")
 
@@ -93,7 +93,7 @@ def test_route_options_survives_failed_fallback_calls() -> None:
     router = FakeRouter({None: [straight_route("a")]})
     routes = GeoService(geocoder=FakeGeocoder([]), router=router).route_options(ORIGIN, DEST)
     assert len(routes) == 1
-    assert router.calls == [None, "toll", "motorway"]
+    assert set(router.calls) == {None, "toll", "motorway"}
 
 
 def test_route_options_rejects_same_place() -> None:
@@ -111,12 +111,16 @@ def test_route_options_rejects_overlong_trip(settings: object) -> None:
 
 def test_routes_are_cached_per_endpoint_pair() -> None:
     router = FakeRouter(
-        {None: [straight_route("a"), straight_route("b", lat=0.3), straight_route("c", lat=0.6)]}
+        {
+            None: [straight_route("a"), straight_route("b", lat=0.3), straight_route("c", lat=0.6)],
+            "toll": [straight_route("t", lat=0.9)],
+            "motorway": [straight_route("m", lat=1.2)],
+        }
     )
     service = GeoService(geocoder=FakeGeocoder([]), router=router)
     service.route_options(ORIGIN, DEST)
     service.route_options(ORIGIN, DEST)
-    assert router.calls == [None]
+    assert len(router.calls) == 3  # second call fully served from cache
 
 
 def test_resolve_returns_best_match_or_raises() -> None:

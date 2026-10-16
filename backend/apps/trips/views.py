@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from django.conf import settings
@@ -14,6 +15,7 @@ from apps.trips.models import TripPlan
 from apps.trips.serializers import TripPlanRequestSerializer
 from apps.trips.services.heatmap import build_heatmap
 from apps.trips.services.planner import PlanRequest, TripPlanner
+from apps.trips.services.timing import StageTimer
 
 
 class HealthView(APIView):
@@ -51,17 +53,25 @@ class TripPlanCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        timer = StageTimer()
         planner = TripPlanner()
-        plan_request = PlanRequest(
-            origin=planner.resolve_place(data["origin"]),
-            destination=planner.resolve_place(data["destination"]),
-            departure=data["departure_time"].replace(microsecond=0),
-            load_lb=data["load_weight_lb"],
-            interval_miles=data["checkpoint_interval_miles"],
-        )
-        result = planner.plan(plan_request)
-        plan = TripPlan.objects.create(request=result["request"], result=result)
-        return Response(_plan_payload(plan), status=status.HTTP_201_CREATED)
+        with timer.stage("geocode"), ThreadPoolExecutor(max_workers=2) as pool:
+            origin, destination = pool.map(
+                planner.resolve_place, (data["origin"], data["destination"])
+            )
+            plan_request = PlanRequest(
+                origin=origin,
+                destination=destination,
+                departure=data["departure_time"].replace(microsecond=0),
+                load_lb=data["load_weight_lb"],
+                interval_miles=data["checkpoint_interval_miles"],
+            )
+        result = planner.plan(plan_request, timer=timer)
+        with timer.stage("persist"):
+            plan = TripPlan.objects.create(request=result["request"], result=result)
+        response = Response(_plan_payload(plan), status=status.HTTP_201_CREATED)
+        response["Server-Timing"] = timer.header()
+        return response
 
 
 class TripPlanDetailView(APIView):

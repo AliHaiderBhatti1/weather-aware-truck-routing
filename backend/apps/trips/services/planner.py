@@ -23,6 +23,7 @@ from apps.geo.types import Checkpoint, GeoPoint, Place, Route
 from apps.risk.engine import RiskAssessment, WeatherSample, assess
 from apps.risk.levels import RiskLevel
 from apps.risk.ranking import RiskSegment, rank_routes, summarize_route
+from apps.trips.services.timing import StageTimer
 from apps.weather.service import WeatherService
 
 logger = logging.getLogger(__name__)
@@ -62,15 +63,31 @@ class TripPlanner:
             return Place(name=name, full_name=name, point=point)
         return self._geo.resolve(data["query"])
 
-    def plan(self, request: PlanRequest) -> dict[str, Any]:
-        routes = self._geo.route_options(request.origin.point, request.destination.point)
+    def plan(self, request: PlanRequest, timer: StageTimer | None = None) -> dict[str, Any]:
+        timer = timer or StageTimer()
+        with timer.stage("routes"):
+            routes = self._geo.route_options(request.origin.point, request.destination.point)
 
-        checkpoints_by_route = {
-            route.id: sample_checkpoints(route, request.interval_miles, request.departure)
-            for route in routes
-        }
-        assessed = self._assess_all(checkpoints_by_route, request.load_lb)
+        with timer.stage("checkpoints"):
+            checkpoints_by_route = {
+                route.id: sample_checkpoints(route, request.interval_miles, request.departure)
+                for route in routes
+            }
+        with timer.stage("weather"):
+            assessed = self._assess_all(checkpoints_by_route, request.load_lb)
+        with timer.stage("rank"):
+            result = self._build_result(request, routes, assessed)
+        logger.info(
+            "plan %s -> %s: %s", request.origin.name, request.destination.name, timer.summary()
+        )
+        return result
 
+    def _build_result(
+        self,
+        request: PlanRequest,
+        routes: list[Route],
+        assessed: dict[str, list[AssessedCheckpoint]],
+    ) -> dict[str, Any]:
         summaries = [
             summarize_route(
                 route.id,
