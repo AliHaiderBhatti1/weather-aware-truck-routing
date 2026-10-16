@@ -26,6 +26,7 @@ import {
   SEGMENTS_CASING,
 } from './layers'
 import { buildMapData } from './mapData'
+import { RouteLabels } from './RouteLabels'
 
 const MAP_STYLE =
   import.meta.env.VITE_MAP_STYLE_URL ||
@@ -152,6 +153,13 @@ export function MapView({
         </>
       )}
 
+      {plan && (
+        <RouteLabels
+          routes={plan.routes}
+          selectedRouteId={selectedRouteId}
+          onSelectRoute={onSelectRoute}
+        />
+      )}
       {origin && <EndpointMarker lon={origin.lon} lat={origin.lat} label="A" />}
       {destination && <EndpointMarker lon={destination.lon} lat={destination.lat} label="B" />}
 
