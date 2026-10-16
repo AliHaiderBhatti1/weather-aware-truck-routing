@@ -39,7 +39,8 @@ HOURLY_FIELDS = (
 MAX_LOCATIONS_PER_REQUEST = 40
 MAX_CONCURRENT_REQUESTS = 4
 RETRIES_ON_TIMEOUT = 1
-RETRY_AFTER_RATE_LIMIT_SECONDS = 3.0
+RETRY_AFTER_RATE_LIMIT_SECONDS = 2.0
+RETRIES_ON_TRANSIENT = 2
 
 
 class OpenMeteoClient:
@@ -85,10 +86,10 @@ class OpenMeteoClient:
                 return self._fetch_chunk(points, start, end)
             except RateLimitedError:
                 attempt += 1
-                if attempt > RETRIES_ON_TIMEOUT:
+                if attempt > RETRIES_ON_TRANSIENT:
                     raise
-                logger.info("Open-Meteo rate limited; retrying chunk after a short pause")
-                time.sleep(RETRY_AFTER_RATE_LIMIT_SECONDS)
+                logger.info("Open-Meteo busy; retrying chunk after a short pause")
+                time.sleep(RETRY_AFTER_RATE_LIMIT_SECONDS * attempt)
             except UpstreamError as exc:
                 attempt += 1
                 if attempt > RETRIES_ON_TIMEOUT or "Timeout" not in exc.message:
@@ -115,11 +116,13 @@ class OpenMeteoClient:
             raise UpstreamError(f"Open-Meteo request failed: {exc.__class__.__name__}") from exc
 
         payload = _safe_json(response)
-        if response.status_code == 429:
-            logger.warning("Open-Meteo rate limit hit")
+        if response.status_code == 429 or response.status_code >= 500:
+            # Rate limit or an overloaded upstream: both are transient.
+            reason = payload.get("reason") if isinstance(payload, dict) else None
+            logger.warning("Open-Meteo transient failure %s %s", response.status_code, reason)
             raise RateLimitedError(
                 "The weather service is busy right now. Please try again in a minute.",
-                details={"provider": "open-meteo"},
+                details={"provider": "open-meteo", "status": response.status_code},
             )
         if response.status_code >= 400:
             reason = payload.get("reason") if isinstance(payload, dict) else None

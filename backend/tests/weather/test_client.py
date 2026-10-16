@@ -127,9 +127,23 @@ def test_rate_limit_is_retried_once_then_surfaces_as_503(monkeypatch: pytest.Mon
     )
     with pytest.raises(RateLimitedError) as info:
         _client().hourly(POINTS, START, END)
-    assert route.call_count == 2
+    assert route.call_count == 3  # initial + 2 retries
     assert info.value.http_status == 503
     assert "try again" in info.value.message
+
+
+@respx.mock
+def test_overloaded_upstream_is_treated_as_transient(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(client_module, "RETRY_AFTER_RATE_LIMIT_SECONDS", 0)
+    body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())
+    route = respx.get(URL).mock(
+        side_effect=[
+            httpx.Response(503, json={"reason": "The service is overloaded"}),
+            httpx.Response(200, json=body),
+        ]
+    )
+    assert len(_client().hourly(POINTS, START, END)) == 2
+    assert route.call_count == 2
 
 
 @respx.mock
