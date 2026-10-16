@@ -85,6 +85,18 @@ A checkpoint's level is the worst of wind, rain, snow and the load override. Eac
 | Plans are persisted | Shareable `?plan=<id>` links for evaluators; the heatmap is computed once and stored on the plan. |
 | LocMem cache | Keeps repeated planning instant and well inside free-tier limits on a single instance; swap for Redis via `CACHES` if scaled out. |
 
+## Performance
+
+Every `POST /api/trips/` response carries a `Server-Timing` header (visible in DevTools → Network → Timing) with the time spent per stage: `geocode`, `routes`, `checkpoints`, `weather`, `rank`, `persist`. Typical numbers for a 500-mile trip:
+
+| Stage | Typical | What bounds it |
+|---|---|---|
+| routes | 1–2 s | Three Mapbox Directions calls made concurrently (fastest, no tolls, no motorways) |
+| weather | 0.7–1 s | All checkpoints of all routes, de-duplicated and fetched from Open-Meteo in small concurrent chunks |
+| everything else | < 0.2 s | Sampling, risk scoring, ranking, RDP simplification, persistence |
+
+Repeated plans for the same corridor are served from cache (routes 1 h, weather 15 min). Open-Meteo occasionally has slow or overloaded spells; the client retries transient failures with backoff and the UI shows staged progress so a 10 s plan still feels alive. The heatmap is fetched separately after the plan renders, so it never delays the first paint.
+
 ## API
 
 | Method & path | Purpose |
