@@ -51,6 +51,10 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run build
+      - name: MapLibre worker is emitted and referenced
+        run: |
+          worker=$(ls dist/assets | grep -E '^maplibre-gl-worker-.*\.mjs$')
+          grep -q "assets/$worker" dist/assets/*.js
 
   docker:
     name: Backend Docker image builds

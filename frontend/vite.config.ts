@@ -10,7 +10,8 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
-  // MapLibre ships its own web worker; pre-bundling it breaks the worker URL in dev.
+  // MapLibre ships its own web worker (see src/features/map/maplibreWorker.ts);
+  // pre-bundling it in dev would break that worker's URL.
   optimizeDeps: { exclude: ['maplibre-gl'] },
   server: {
     port: 5173,

@@ -1,4 +1,5 @@
 import 'maplibre-gl/dist/maplibre-gl.css'
+import './maplibreWorker'
 
 import type { MapLayerMouseEvent } from 'maplibre-gl'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
