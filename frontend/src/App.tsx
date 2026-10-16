@@ -113,7 +113,7 @@ export default function App() {
             />
           </div>
         )}
-        {!plan && !planMutation.isPending && !planQuery.isPending && (
+        {!plan && !planMutation.isPending && !planQuery.isLoading && (
           <div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 flex -translate-y-1/2 justify-center px-4">
             <div className="shadow-panel max-w-sm rounded-2xl border border-slate-200 bg-white/90 p-5 text-center backdrop-blur">
               <p className="text-sm font-semibold text-slate-900">Plan a trip to see routes here</p>
