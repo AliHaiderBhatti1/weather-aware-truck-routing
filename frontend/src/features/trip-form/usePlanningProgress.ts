@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const STEPS: { after: number; label: string }[] = [
   { after: 0, label: 'Finding three routes…' },
@@ -8,23 +8,23 @@ const STEPS: { after: number; label: string }[] = [
   { after: 9000, label: 'The weather provider is slow right now, still working…' },
 ]
 
+const TICK_MS = 250
+
 /** Elapsed-time based status text while a plan request is in flight. */
 export function usePlanningProgress(pending: boolean): string | null {
-  const startedAt = useRef<number | null>(null)
-  const [now, setNow] = useState(0)
+  const [elapsed, setElapsed] = useState(0)
 
   useEffect(() => {
-    if (!pending) {
-      startedAt.current = null
-      return
+    if (!pending) return
+    const started = performance.now()
+    const handle = window.setInterval(() => setElapsed(performance.now() - started), TICK_MS)
+    return () => {
+      window.clearInterval(handle)
+      window.setTimeout(() => setElapsed(0), 0)
     }
-    startedAt.current = performance.now()
-    const handle = window.setInterval(() => setNow(performance.now()), 250)
-    return () => window.clearInterval(handle)
   }, [pending])
 
   if (!pending) return null
-  const elapsed = startedAt.current === null ? 0 : Math.max(0, now - startedAt.current)
   let label = STEPS[0].label
   for (const step of STEPS) if (elapsed >= step.after) label = step.label
   return label
