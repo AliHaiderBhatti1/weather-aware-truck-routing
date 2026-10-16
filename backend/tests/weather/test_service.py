@@ -30,7 +30,7 @@ class FakeClient:
         self.calls: list[tuple[int, datetime, datetime]] = []
         self.chunk_sizes: list[int] = []
 
-    def hourly(self, points, start, end, *, chunk_size=40):  # type: ignore[no-untyped-def]
+    def hourly(self, points, start, end, *, chunk_size=40, fields=None):  # type: ignore[no-untyped-def]
         self.calls.append((len(points), start, end))
         self.chunk_sizes.append(chunk_size)
         return [_series(p) for p in points]

@@ -24,7 +24,13 @@ class FakeWeather:
         return [self.rule(point, when) for point, when in requests]
 
     def hourly(
-        self, points: Sequence[GeoPoint], start: datetime, end: datetime
+        self,
+        points: Sequence[GeoPoint],
+        start: datetime,
+        end: datetime,
+        *,
+        chunk_size: int = 40,
+        fields: Sequence[str] | None = None,
     ) -> list[HourlySeries]:
         hours = int((end - start).total_seconds() // 3600) + 1
         series = []

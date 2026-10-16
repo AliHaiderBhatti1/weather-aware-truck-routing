@@ -25,6 +25,8 @@ from apps.weather.types import HourlySeries
 
 logger = logging.getLogger(__name__)
 
+# Open-Meteo weights its rate limit by locations x variables x days, so the
+# background heatmap asks only for what the risk rules need.
 HOURLY_FIELDS = (
     "wind_speed_10m",
     "wind_gusts_10m",
@@ -34,6 +36,7 @@ HOURLY_FIELDS = (
     "temperature_2m",
     "weather_code",
 )
+RISK_ONLY_FIELDS = ("wind_speed_10m", "rain", "showers", "snowfall")
 # Open-Meteo's latency grows roughly linearly with locations per call, while
 # its free tier is rate-limited per *request*. Latency-critical calls (the
 # checkpoints of a plan) use small concurrent chunks; background work (the
@@ -63,6 +66,7 @@ class OpenMeteoClient:
         end: datetime,
         *,
         chunk_size: int = DEFAULT_CHUNK_SIZE,
+        fields: Sequence[str] = HOURLY_FIELDS,
     ) -> list[HourlySeries]:
         """
         Hourly series for every point between ``start`` and ``end`` (inclusive hours, UTC).
@@ -76,21 +80,27 @@ class OpenMeteoClient:
             points[offset : offset + chunk_size] for offset in range(0, len(points), chunk_size)
         ]
         if len(chunks) == 1:
-            return self._fetch_chunk_with_retry(chunks[0], start, end)
+            return self._fetch_chunk_with_retry(chunks[0], start, end, fields)
         workers = min(MAX_CONCURRENT_REQUESTS, len(chunks))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             results = list(
-                pool.map(lambda chunk: self._fetch_chunk_with_retry(chunk, start, end), chunks)
+                pool.map(
+                    lambda chunk: self._fetch_chunk_with_retry(chunk, start, end, fields), chunks
+                )
             )
         return [series for chunk_series in results for series in chunk_series]
 
     def _fetch_chunk_with_retry(
-        self, points: Sequence[GeoPoint], start: datetime, end: datetime
+        self,
+        points: Sequence[GeoPoint],
+        start: datetime,
+        end: datetime,
+        fields: Sequence[str] = HOURLY_FIELDS,
     ) -> list[HourlySeries]:
         attempt = 0
         while True:
             try:
-                return self._fetch_chunk(points, start, end)
+                return self._fetch_chunk(points, start, end, fields)
             except RateLimitedError:
                 attempt += 1
                 if attempt > RETRIES_ON_TRANSIENT:
@@ -104,12 +114,16 @@ class OpenMeteoClient:
                 logger.info("Open-Meteo timed out; retrying chunk of %d points", len(points))
 
     def _fetch_chunk(
-        self, points: Sequence[GeoPoint], start: datetime, end: datetime
+        self,
+        points: Sequence[GeoPoint],
+        start: datetime,
+        end: datetime,
+        fields: Sequence[str] = HOURLY_FIELDS,
     ) -> list[HourlySeries]:
         params = {
             "latitude": ",".join(f"{p.lat:.4f}" for p in points),
             "longitude": ",".join(f"{p.lon:.4f}" for p in points),
-            "hourly": ",".join(HOURLY_FIELDS),
+            "hourly": ",".join(fields),
             "wind_speed_unit": "mph",
             "precipitation_unit": "inch",
             "temperature_unit": "fahrenheit",

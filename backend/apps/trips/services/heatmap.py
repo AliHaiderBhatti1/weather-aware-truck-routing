@@ -16,6 +16,7 @@ from django.conf import settings
 from apps.geo.types import GeoPoint
 from apps.geo.units import miles_to_meters
 from apps.risk.engine import assess
+from apps.weather.client import RISK_ONLY_FIELDS
 from apps.weather.service import WeatherService
 
 MIN_SPACING_DEG = 0.08
@@ -42,7 +43,7 @@ def build_heatmap(
     end = start + timedelta(hours=hours)
 
     grid = corridor_grid(routes_coords, plan["bounds"], max_points=max_points)
-    series = weather.hourly(grid, start, end)
+    series = weather.hourly(grid, start, end, fields=RISK_ONLY_FIELDS)
 
     times = [start + timedelta(hours=i) for i in range(hours + 1)]
     points: list[dict[str, Any]] = []

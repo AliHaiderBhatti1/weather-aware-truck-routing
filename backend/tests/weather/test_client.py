@@ -151,3 +151,11 @@ def test_rate_limit_then_success_recovers(monkeypatch: pytest.MonkeyPatch) -> No
     body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())
     respx.get(URL).mock(side_effect=[httpx.Response(429, json={}), httpx.Response(200, json=body)])
     assert len(_client().hourly(POINTS, START, END)) == 2
+
+
+@respx.mock
+def test_requested_fields_are_configurable() -> None:
+    body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())
+    route = respx.get(URL).mock(return_value=httpx.Response(200, json=body))
+    _client().hourly(POINTS, START, END, fields=("wind_speed_10m", "rain", "showers", "snowfall"))
+    assert route.calls.last.request.url.params["hourly"] == "wind_speed_10m,rain,showers,snowfall"

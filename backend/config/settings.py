@@ -156,7 +156,7 @@ MAX_DEPARTURE_DAYS_AHEAD = 14
 # Open-Meteo serves hourly forecasts up to 16 days out; stay a little inside that.
 FORECAST_HORIZON_DAYS = 15
 HEATMAP_FORECAST_HOURS = 48
-HEATMAP_MAX_POINTS = 300
+HEATMAP_MAX_POINTS = 220
 
 # --- Logging ----------------------------------------------------------------
 
