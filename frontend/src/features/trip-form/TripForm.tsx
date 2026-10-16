@@ -190,6 +190,12 @@ export function TripForm({ onSubmit, pending, error, defaultValues }: TripFormPr
               ))}
             </ul>
           )}
+          {error.code === 'rate_limited' && (
+            <p className="mt-1">
+              Nothing is wrong with your trip; the forecast provider is throttling. Retry in a
+              moment.
+            </p>
+          )}
         </Alert>
       ) : error ? (
         <Alert tone="error" title="Something went wrong while planning the trip." />
