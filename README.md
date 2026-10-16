@@ -8,7 +8,7 @@ every route option and scoring wind, rain and snow against the load.
 | | |
 |---|---|
 | Live app | _add Vercel URL_ |
-| API | _add Render URL_ (`/api/docs/` for Swagger) |
+| API | _add Vercel API URL_ (`/api/docs/` for Swagger) |
 | Walkthrough | _add Loom URL_ |
 
 ![App screenshot: three routes, risk-coloured checkpoints and the 48 h corridor heatmap](docs/screenshot.png)
@@ -49,7 +49,7 @@ A checkpoint's level is the worst of wind, rain, snow and the load override. Eac
 ```
 ┌────────────────────┐      POST /api/trips/        ┌──────────────────────────┐
 │  React + MapLibre  │ ───────────────────────────▶ │  Django REST API          │
-│  (Vercel)          │ ◀─────────────────────────── │  (Render, Docker)         │
+│  (Vercel)          │ ◀─────────────────────────── │  (Vercel Function)        │
 │                    │   plan JSON (routes,         │                          │
 │  • trip form       │   checkpoints, risk, rank)   │  apps/geo     Mapbox      │
 │  • route cards     │                              │  apps/weather Open-Meteo  │
@@ -160,7 +160,7 @@ cd frontend && npm run check    # oxlint + tsc + vitest + prettier
 
 ## Deployment
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for click-by-click steps (Vercel for the web app, Render for the API, Neon for Postgres). `render.yaml` and `frontend/vercel.json` are included.
+Both apps run on Vercel's free tier as two projects from this repo (web: `frontend/`, API: `backend/` as a Django Vercel Function) with Neon Postgres. Migrations run in the API's build step. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for click-by-click steps. `backend/Dockerfile` remains for local use or any container host.
 
 ## Project layout
 
