@@ -3,8 +3,11 @@
   "configurations": [
     {
       "name": "frontend",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
+      "runtimeExecutable": "/Users/alihaiderbhatti/.nvm/versions/node/v20.20.2/bin/node",
+      "runtimeArgs": [
+        "/Users/alihaiderbhatti/Documents/weather-aware-truck-routing/frontend/node_modules/vite/bin/vite.js",
+        "/Users/alihaiderbhatti/Documents/weather-aware-truck-routing/frontend"
+      ],
       "port": 5173
     }
   ]
