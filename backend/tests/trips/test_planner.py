@@ -107,3 +107,22 @@ def test_resolve_place_prefers_coordinates_over_geocoding() -> None:
     assert place.point == GeoPoint(1.5, 2.5)
     assert place.name == "Pinned"
     assert planner.resolve_place({"query": "Denver"}) == ORIGIN
+
+
+def test_peak_level_includes_the_destination_checkpoint() -> None:
+    route = straight_route("r", total_miles=50, lat=0.0)
+    end_lon = route.coordinates[-1][0]
+
+    def rain_at_destination(point: GeoPoint, when: datetime) -> WeatherSample:
+        if abs(point.lon - end_lon) < 1e-9:
+            return WeatherSample(wind_mph=5, rain_in_per_hr=0.4, snow_in_per_hr=0)
+        return calm(point, when)
+
+    plan = TripPlanner(geo=FakeGeo([route]), weather=FakeWeather(rain_at_destination)).plan(  # type: ignore[arg-type]
+        _request()
+    )
+
+    summary = plan["routes"][0]["summary"]
+    assert summary["max_level"] == "high"  # arrival conditions are visible...
+    assert summary["high_miles"] == 0.0  # ...but govern no miles
+    assert plan["routes"][0]["checkpoints"][-1]["risk"]["level"] == "high"
