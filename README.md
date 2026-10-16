@@ -141,6 +141,14 @@ npm run dev                     # http://localhost:5173 (proxies /api to :8000)
 
 Or with Docker: `docker compose up --build`.
 
+## Finding demo weather
+
+Forecasts are calm most days, so there is a management command that scans a set of corridors (US, Europe, Asia, southern hemisphere) over the next 14 days and prints the departure windows that currently produce each risk level:
+
+```bash
+cd backend && python manage.py find_demo_trips --load 45000
+```
+
 ## Quality gates
 
 ```bash
