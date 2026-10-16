@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { tripFormSchema } from './schema'
 import { toRequest } from './toRequest'
 import { TripForm } from './TripForm'
 
@@ -50,5 +51,19 @@ describe('TripForm', () => {
     expect(request.load_weight_lb).toBe(42000)
     expect(request.checkpoint_interval_miles).toBe(10)
     expect(new Date(request.departure_time).getTime()).toBe(new Date('2026-10-20T08:00').getTime())
+  })
+})
+
+describe('tripFormSchema', () => {
+  it('rejects pairs that are too far apart to drive', () => {
+    const result = tripFormSchema.safeParse({
+      origin: { name: 'New Delhi', full_name: 'New Delhi, India', lat: 28.593, lon: 77.189 },
+      destination: { name: 'SLC', full_name: 'Salt Lake City, UT', lat: 40.763, lon: -111.89 },
+      departure: new Date(Date.now() + 3_600_000).toISOString(),
+      loadWeightLb: 40000,
+      intervalMiles: 25,
+    })
+    expect(result.success).toBe(false)
+    expect(JSON.stringify(result.error?.issues)).toMatch(/miles apart/)
   })
 })

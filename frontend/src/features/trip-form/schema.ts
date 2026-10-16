@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { haversineMiles } from '@/lib/geometry'
+
 export const placeSchema = z.object({
   name: z.string().min(1),
   full_name: z.string().min(1),
@@ -11,6 +13,7 @@ export type PlaceValue = z.infer<typeof placeSchema>
 
 export const MAX_LOAD_LB = 200_000
 export const MAX_DAYS_AHEAD = 14
+export const MAX_TRIP_MILES = 3500
 export const INTERVAL_OPTIONS = [10, 25, 50] as const
 
 export type IntervalMiles = (typeof INTERVAL_OPTIONS)[number]
@@ -65,5 +68,18 @@ export const tripFormSchema: z.ZodType<TripFormValues, TripFormValues> = z
         path: ['destination'],
         message: 'Destination must differ from the origin.',
       })
+    }
+    if (values.origin && values.destination) {
+      const straightLine = haversineMiles(
+        [values.origin.lon, values.origin.lat],
+        [values.destination.lon, values.destination.lat],
+      )
+      if (straightLine > MAX_TRIP_MILES) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['destination'],
+          message: `These places are ${Math.round(straightLine).toLocaleString()} miles apart; trips are limited to ${MAX_TRIP_MILES.toLocaleString()} miles.`,
+        })
+      }
     }
   })
