@@ -1,0 +1,31 @@
+# Local full-stack run: `docker compose up --build`
+# API on http://localhost:8000, web on http://localhost:5173 (proxies /api to the API).
+services:
+  api:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      DJANGO_DEBUG: "true"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,api"
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
+    ports:
+      - "8000:8000"
+    volumes:
+      - api-data:/app/data
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npx vite --host 0.0.0.0 --port 5173"
+    environment:
+      VITE_API_BASE_URL: ""
+    volumes:
+      - ./frontend:/app
+      - web-node-modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  api-data:
+  web-node-modules:
