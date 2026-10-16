@@ -3,7 +3,6 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from django.conf import settings
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
@@ -16,6 +15,7 @@ from apps.trips.serializers import TripPlanRequestSerializer
 from apps.trips.services.heatmap import build_heatmap
 from apps.trips.services.planner import PlanRequest, TripPlanner
 from apps.trips.services.timing import StageTimer
+from config.middleware import health_payload
 
 
 class HealthView(APIView):
@@ -25,16 +25,9 @@ class HealthView(APIView):
 
     @extend_schema(responses={200: {"type": "object"}})
     def get(self, request: Request) -> Response:
-        return Response(
-            {
-                "status": "ok",
-                "version": settings.SPECTACULAR_SETTINGS["VERSION"],
-                "providers": {
-                    "routing": "mapbox" if settings.MAPBOX_ACCESS_TOKEN else "unconfigured",
-                    "weather": "open-meteo",
-                },
-            }
-        )
+        # Normally answered by config.middleware.HealthCheckMiddleware; kept so
+        # the endpoint appears in the OpenAPI schema.
+        return Response(health_payload())
 
 
 def _plan_payload(plan: TripPlan) -> dict[str, Any]:
