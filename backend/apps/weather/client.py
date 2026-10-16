@@ -34,10 +34,13 @@ HOURLY_FIELDS = (
     "temperature_2m",
     "weather_code",
 )
-# Open-Meteo's latency grows with locations per call, but its free tier is
-# rate-limited per *request*, so fewer, larger calls are the better trade.
-MAX_LOCATIONS_PER_REQUEST = 40
-MAX_CONCURRENT_REQUESTS = 4
+# Open-Meteo's latency grows roughly linearly with locations per call, while
+# its free tier is rate-limited per *request*. Latency-critical calls (the
+# checkpoints of a plan) use small concurrent chunks; background work (the
+# heatmap grid) uses large ones to stay well inside the request budget.
+DEFAULT_CHUNK_SIZE = 40
+FAST_CHUNK_SIZE = 12
+MAX_CONCURRENT_REQUESTS = 6
 RETRIES_ON_TIMEOUT = 1
 RETRY_AFTER_RATE_LIMIT_SECONDS = 2.0
 RETRIES_ON_TRANSIENT = 2
@@ -54,19 +57,23 @@ class OpenMeteoClient:
         self._http = http or httpx.Client(timeout=timeout or settings.OPEN_METEO_TIMEOUT_SECONDS)
 
     def hourly(
-        self, points: Sequence[GeoPoint], start: datetime, end: datetime
+        self,
+        points: Sequence[GeoPoint],
+        start: datetime,
+        end: datetime,
+        *,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
     ) -> list[HourlySeries]:
         """
         Hourly series for every point between ``start`` and ``end`` (inclusive hours, UTC).
 
-        Points are split into small chunks fetched concurrently: Open-Meteo's
-        latency grows roughly linearly with the number of locations per call.
+        Points are split into ``chunk_size`` groups fetched concurrently.
         """
         if not points:
             return []
+        chunk_size = max(1, chunk_size)
         chunks = [
-            points[offset : offset + MAX_LOCATIONS_PER_REQUEST]
-            for offset in range(0, len(points), MAX_LOCATIONS_PER_REQUEST)
+            points[offset : offset + chunk_size] for offset in range(0, len(points), chunk_size)
         ]
         if len(chunks) == 1:
             return self._fetch_chunk_with_retry(chunks[0], start, end)

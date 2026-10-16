@@ -65,7 +65,6 @@ def test_single_location_object_response_is_accepted() -> None:
 
 @respx.mock
 def test_requests_are_chunked(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(client_module, "MAX_LOCATIONS_PER_REQUEST", 2)
     monkeypatch.setattr(client_module, "MAX_CONCURRENT_REQUESTS", 1)
     body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())
     route = respx.get(URL).mock(
@@ -75,7 +74,7 @@ def test_requests_are_chunked(monkeypatch: pytest.MonkeyPatch) -> None:
         ]
     )
 
-    series = _client().hourly([*POINTS, GeoPoint(41.0, -107.0)], START, END)
+    series = _client().hourly([*POINTS, GeoPoint(41.0, -107.0)], START, END, chunk_size=2)
 
     assert route.call_count == 2
     assert len(series) == 3

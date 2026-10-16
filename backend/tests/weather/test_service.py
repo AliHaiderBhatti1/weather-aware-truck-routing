@@ -28,9 +28,11 @@ def _series(point: GeoPoint, hours: int = 3, wind: float = 10.0) -> HourlySeries
 class FakeClient:
     def __init__(self) -> None:
         self.calls: list[tuple[int, datetime, datetime]] = []
+        self.chunk_sizes: list[int] = []
 
-    def hourly(self, points, start, end):  # type: ignore[no-untyped-def]
+    def hourly(self, points, start, end, *, chunk_size=40):  # type: ignore[no-untyped-def]
         self.calls.append((len(points), start, end))
+        self.chunk_sizes.append(chunk_size)
         return [_series(p) for p in points]
 
 
@@ -64,6 +66,7 @@ def test_samples_at_fetches_one_window_for_all_points() -> None:
     samples = service.samples_at(requests)
 
     assert client.calls == [(2, T0, T0 + timedelta(hours=2))]
+    assert client.chunk_sizes == [12]  # latency-critical path uses small chunks
     assert [s.wind_mph for s in samples if s] == [10.0, 12.0]
 
 

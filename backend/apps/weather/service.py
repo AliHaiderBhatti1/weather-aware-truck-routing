@@ -11,7 +11,7 @@ from django.core.cache import cache
 
 from apps.geo.types import GeoPoint
 from apps.risk.engine import WeatherSample
-from apps.weather.client import OpenMeteoClient
+from apps.weather.client import DEFAULT_CHUNK_SIZE, FAST_CHUNK_SIZE, OpenMeteoClient
 from apps.weather.types import HourlySeries
 
 
@@ -20,7 +20,12 @@ class WeatherService:
         self._client = client or OpenMeteoClient()
 
     def hourly(
-        self, points: Sequence[GeoPoint], start: datetime, end: datetime
+        self,
+        points: Sequence[GeoPoint],
+        start: datetime,
+        end: datetime,
+        *,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
     ) -> list[HourlySeries]:
         """Hourly series for each point, served from cache when possible."""
         start = _floor_hour(start)
@@ -37,7 +42,7 @@ class WeatherService:
                 missing[key] = point
 
         if missing:
-            fetched = self._client.hourly(list(missing.values()), start, end)
+            fetched = self._client.hourly(list(missing.values()), start, end, chunk_size=chunk_size)
             fresh = dict(zip(missing.keys(), fetched, strict=True))
             cache.set_many(fresh, settings.WEATHER_CACHE_TTL)
             cached.update(fresh)
@@ -51,7 +56,9 @@ class WeatherService:
         if not requests:
             return []
         times = [when for _, when in requests]
-        series = self.hourly([point for point, _ in requests], min(times), max(times))
+        series = self.hourly(
+            [point for point, _ in requests], min(times), max(times), chunk_size=FAST_CHUNK_SIZE
+        )
         return [s.sample_at(when) for s, (_, when) in zip(series, requests, strict=True)]
 
 
