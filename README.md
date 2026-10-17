@@ -157,7 +157,7 @@ cd backend  && ruff check . && ruff format --check . && mypy . && pytest --cov
 cd frontend && npm run check    # oxlint + tsc + vitest + prettier
 ```
 
-150 backend tests cover every threshold boundary, the load rules, ranking tie-breaks, checkpoint interpolation, route de-duplication, provider parsing (mocked HTTP), the planner end-to-end with fakes, and the API contract. Frontend tests cover the form validation, request mapping, GeoJSON builders, geometry splitting and formatting. CI runs all of it plus a Docker build on every push.
+146 backend tests cover every threshold boundary, the load rules, ranking tie-breaks, checkpoint interpolation, route de-duplication, provider parsing (mocked HTTP), the planner end-to-end with fakes, and the API contract. Frontend tests cover the form validation, request mapping, GeoJSON builders, geometry splitting and formatting. CI runs all of it plus a Docker build on every push.
 
 ## Deployment
 
