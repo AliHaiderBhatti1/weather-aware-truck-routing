@@ -22,7 +22,7 @@ from apps.risk.levels import RiskLevel
 
 @dataclass(frozen=True, slots=True)
 class RiskSegment:
-    """A stretch of road governed by one checkpoint's assessment."""
+    """A stretch of road represented by one checkpoint's assessment."""
 
     level: RiskLevel
     miles: float
@@ -35,8 +35,9 @@ class RouteRiskSummary:
     total_miles: float
     miles_by_level: dict[RiskLevel, float]
     average_risk: float
-    max_level: RiskLevel
     """Distance-weighted mean of the numeric level (0 = Low ... 4 = No Travel)."""
+    max_level: RiskLevel
+    """Worst level at any checkpoint, including zero-length ones."""
 
     @property
     def no_travel_miles(self) -> float:
@@ -52,7 +53,9 @@ class RouteRiskSummary:
 
     @property
     def is_travel_advised(self) -> bool:
-        return self.no_travel_miles == 0.0
+        # Checked on the worst checkpoint, not just mileage, so a No-Travel
+        # point can never be outweighed by its length.
+        return self.max_level < RiskLevel.NO_TRAVEL
 
     def sort_key(self) -> tuple[float, float, float, float, float]:
         # Round so that floating point noise never decides a tie.
@@ -82,12 +85,12 @@ def summarize_route(
     total = 0.0
     max_level = RiskLevel.LOW
     for segment in segments:
+        max_level = max(max_level, segment.level)
         if segment.miles <= 0:
             continue
         miles_by_level[segment.level] += segment.miles
         weighted += int(segment.level) * segment.miles
         total += segment.miles
-        max_level = max(max_level, segment.level)
     average = weighted / total if total else 0.0
     return RouteRiskSummary(
         route_id=route_id,

@@ -90,12 +90,15 @@ const plan = {
 } as unknown as TripPlan
 
 describe('buildMapData', () => {
-  it('splits the selected route into one segment per checkpoint coloured by its risk', () => {
+  it('gives each checkpoint the road half-way to its neighbours', () => {
     const data = buildMapData(plan, 'a')
-    expect(data.segments.features).toHaveLength(2)
-    expect(data.segments.features.map((f) => f.properties.level)).toEqual(['low', 'severe'])
-    expect(data.segments.features[0].geometry.coordinates[0]).toEqual([0, 0])
-    expect(data.segments.features[1].geometry.coordinates.at(-1)).toEqual([2, 0])
+    const segments = data.segments.features
+    expect(segments.map((f) => f.properties.level)).toEqual(['low', 'severe', 'unknown'])
+    expect(segments[0].geometry.coordinates[0]).toEqual([0, 0])
+    // Cuts at the midpoints between checkpoints (lon 0.5 and 1.5 on this line).
+    expect(segments[0].geometry.coordinates.at(-1)![0]).toBeCloseTo(0.5, 2)
+    expect(segments[1].geometry.coordinates.at(-1)![0]).toBeCloseTo(1.5, 2)
+    expect(segments[2].geometry.coordinates.at(-1)).toEqual([2, 0])
   })
 
   it('marks the selected route and orders its checkpoints last', () => {
@@ -112,7 +115,7 @@ describe('buildMapData', () => {
 
   it('falls back to the first route when the selection is unknown', () => {
     const data = buildMapData(plan, 'nope')
-    expect(data.segments.features).toHaveLength(2)
+    expect(data.segments.features).toHaveLength(3)
   })
 
   it('computes hour offsets from the forecast window start', () => {

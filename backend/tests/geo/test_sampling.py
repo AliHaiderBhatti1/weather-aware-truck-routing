@@ -15,7 +15,9 @@ def test_checkpoints_every_interval_plus_destination() -> None:
 
     assert [round(c.distance_from_start_miles, 3) for c in checkpoints] == [0, 25, 50, 75, 100]
     assert [c.index for c in checkpoints] == [0, 1, 2, 3, 4]
-    assert [round(c.segment_miles, 3) for c in checkpoints] == [25, 25, 25, 25, 0]
+    # Half-way to each neighbour: endpoints cover half a stretch.
+    assert [round(c.segment_miles, 3) for c in checkpoints] == [12.5, 25, 25, 25, 12.5]
+    assert sum(c.segment_miles for c in checkpoints) == pytest.approx(100)
 
 
 def test_eta_is_departure_plus_interpolated_travel_time() -> None:
@@ -51,7 +53,7 @@ def test_short_route_yields_origin_and_destination_only() -> None:
     route = straight_route(total_miles=8, segments=2)
     checkpoints = sample_checkpoints(route, interval_miles=50, departure=DEPART)
     assert len(checkpoints) == 2
-    assert checkpoints[0].segment_miles == pytest.approx(8)
+    assert [c.segment_miles for c in checkpoints] == [pytest.approx(4), pytest.approx(4)]
 
 
 def test_invalid_interval_rejected() -> None:

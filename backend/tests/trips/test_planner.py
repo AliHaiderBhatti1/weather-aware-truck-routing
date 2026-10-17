@@ -85,7 +85,8 @@ def test_missing_weather_is_reported_and_excluded_from_totals() -> None:
 
     first = plan["routes"][0]["checkpoints"][0]
     assert first["weather"] is None and first["risk"] is None
-    assert plan["routes"][0]["summary"]["miles_by_level"]["low"] == 25.0
+    # Checkpoints at 25 and 50 miles cover 25 + 12.5 miles; the origin's 12.5 is unknown.
+    assert plan["routes"][0]["summary"]["miles_by_level"]["low"] == 37.5
     assert any("unavailable for 1 checkpoint" in w for w in plan["warnings"])
 
 
@@ -109,20 +110,21 @@ def test_resolve_place_prefers_coordinates_over_geocoding() -> None:
     assert planner.resolve_place({"query": "Denver"}) == ORIGIN
 
 
-def test_peak_level_includes_the_destination_checkpoint() -> None:
+def test_no_travel_at_the_destination_blocks_the_recommendation() -> None:
     route = straight_route("r", total_miles=50, lat=0.0)
     end_lon = route.coordinates[-1][0]
 
-    def rain_at_destination(point: GeoPoint, when: datetime) -> WeatherSample:
+    def deluge_on_arrival(point: GeoPoint, when: datetime) -> WeatherSample:
         if abs(point.lon - end_lon) < 1e-9:
-            return WeatherSample(wind_mph=5, rain_in_per_hr=0.4, snow_in_per_hr=0)
+            return WeatherSample(wind_mph=5, rain_in_per_hr=1.5, snow_in_per_hr=0)
         return calm(point, when)
 
-    plan = TripPlanner(geo=FakeGeo([route]), weather=FakeWeather(rain_at_destination)).plan(  # type: ignore[arg-type]
+    plan = TripPlanner(geo=FakeGeo([route]), weather=FakeWeather(deluge_on_arrival)).plan(  # type: ignore[arg-type]
         _request()
     )
 
     summary = plan["routes"][0]["summary"]
-    assert summary["max_level"] == "high"  # arrival conditions are visible...
-    assert summary["high_miles"] == 0.0  # ...but govern no miles
-    assert plan["routes"][0]["checkpoints"][-1]["risk"]["level"] == "high"
+    assert summary["max_level"] == "no_travel"
+    assert summary["no_travel_miles"] == 12.5  # the arrival half-stretch
+    assert summary["travel_advised"] is False
+    assert plan["recommended_route_id"] is None

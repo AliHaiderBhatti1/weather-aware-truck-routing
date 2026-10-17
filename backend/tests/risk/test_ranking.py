@@ -18,10 +18,12 @@ def test_summary_aggregates_miles_by_level_and_weighted_average() -> None:
     assert summary.is_travel_advised
 
 
-def test_zero_length_segments_are_ignored() -> None:
+def test_zero_length_segments_add_no_miles_but_still_set_the_peak() -> None:
     summary = summarize_route("a", 10, [RiskSegment(STOP, 0.0), RiskSegment(LOW, 5)])
     assert summary.no_travel_miles == 0
     assert summary.average_risk == 0
+    assert summary.max_level is STOP
+    assert not summary.is_travel_advised
 
 
 def test_fewest_severe_miles_wins_even_if_slower() -> None:

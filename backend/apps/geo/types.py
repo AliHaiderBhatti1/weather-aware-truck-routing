@@ -86,4 +86,4 @@ class Checkpoint:
     elapsed_seconds: float
     eta: datetime
     segment_miles: float = field(default=0.0)
-    """Miles from this checkpoint to the next one (0 for the final checkpoint)."""
+    """Miles of road this checkpoint represents: half-way to each neighbour."""

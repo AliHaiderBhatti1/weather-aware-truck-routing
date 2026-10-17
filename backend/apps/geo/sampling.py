@@ -52,6 +52,10 @@ def sample_checkpoints(
             )
         )
 
+    # Each checkpoint represents the road half-way to its neighbours, so the
+    # origin and destination each cover half a stretch and arrival weather
+    # counts toward the route's risk miles like any other checkpoint.
+    distances = [cp.distance_from_start_miles for cp in checkpoints]
     return [
         Checkpoint(
             index=cp.index,
@@ -59,14 +63,17 @@ def sample_checkpoints(
             distance_from_start_miles=cp.distance_from_start_miles,
             elapsed_seconds=cp.elapsed_seconds,
             eta=cp.eta,
-            segment_miles=(
-                checkpoints[i + 1].distance_from_start_miles - cp.distance_from_start_miles
-                if i + 1 < len(checkpoints)
-                else 0.0
-            ),
+            segment_miles=_governed_miles(distances, i),
         )
         for i, cp in enumerate(checkpoints)
     ]
+
+
+def _governed_miles(distances: list[float], index: int) -> float:
+    """Half the gap to the previous checkpoint plus half the gap to the next one."""
+    before = (distances[index] - distances[index - 1]) / 2 if index > 0 else 0.0
+    after = (distances[index + 1] - distances[index]) / 2 if index + 1 < len(distances) else 0.0
+    return before + after
 
 
 def _locate(

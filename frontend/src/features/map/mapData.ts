@@ -46,7 +46,14 @@ function routeLine(route: PlannedRoute, selected: boolean): Feature<LineString, 
 }
 
 function riskSegments(route: PlannedRoute): Feature<LineString, SegmentFeatureProps>[] {
-  const cuts = route.checkpoints.slice(1, -1).map((c) => c.distance_from_start_miles)
+  // Each checkpoint represents the road half-way to its neighbours (same rule
+  // the API uses for risk miles), so cut the line at the midpoints.
+  const cuts = route.checkpoints
+    .slice(0, -1)
+    .map(
+      (c, i) =>
+        (c.distance_from_start_miles + route.checkpoints[i + 1].distance_from_start_miles) / 2,
+    )
   const pieces = splitLineAtDistances(
     route.geometry.coordinates as LngLat[],
     cuts,

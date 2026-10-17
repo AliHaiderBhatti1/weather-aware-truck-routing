@@ -197,12 +197,6 @@ def _serialize_route(
     departure: datetime,
 ) -> dict[str, Any]:
     summary = ranked.summary
-    # Mile totals weight each checkpoint by the stretch it governs, so the
-    # destination (0 miles) never counts; the peak level should still include it.
-    peak_level = max(
-        (item.risk.level for item in assessed if item.risk is not None),
-        default=summary.max_level,
-    )
     return {
         "id": route.id,
         "name": route.name,
@@ -220,7 +214,7 @@ def _serialize_route(
             ],
         },
         "summary": {
-            "max_level": peak_level.slug,
+            "max_level": summary.max_level.slug,
             "average_risk": round(summary.average_risk, 2),
             "travel_advised": summary.is_travel_advised,
             "no_travel_miles": round(summary.no_travel_miles, 1),
