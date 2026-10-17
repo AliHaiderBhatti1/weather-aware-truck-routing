@@ -9,7 +9,7 @@ import pytest
 import respx
 
 from apps.geo.types import GeoPoint
-from apps.trips.exceptions import RateLimitedError, UpstreamError
+from apps.trips.exceptions import RateLimitedError, TransientUpstreamError, UpstreamError
 from apps.weather import client as client_module
 from apps.weather.client import OpenMeteoClient
 
@@ -88,24 +88,45 @@ def test_error_responses_become_upstream_errors() -> None:
     assert info.value.details == {"reason": "Invalid coordinates"}
 
 
+@pytest.fixture
+def no_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(client_module, "RETRY_BACKOFF_SECONDS", 0)
+
+
 @respx.mock
-def test_location_count_mismatch_is_rejected() -> None:
+def test_location_count_mismatch_is_retried_then_reported_as_busy(no_backoff: None) -> None:
     body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())
-    respx.get(URL).mock(return_value=httpx.Response(200, json=body[:1]))
-    with pytest.raises(UpstreamError, match="unexpected number"):
+    route = respx.get(URL).mock(return_value=httpx.Response(200, json=body[0]))  # 1 of 2
+
+    with pytest.raises(TransientUpstreamError) as info:
         _client().hourly(POINTS, START, END)
+
+    assert route.call_count == 3  # initial attempt + 2 retries
+    assert info.value.code == "provider_busy"
+    assert info.value.http_status == 503
+    assert info.value.details["expected"] == 2
 
 
 @respx.mock
-def test_timeout_is_retried_once_then_raised() -> None:
+def test_location_count_mismatch_then_success_recovers(no_backoff: None) -> None:
+    body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())
+    respx.get(URL).mock(
+        side_effect=[httpx.Response(200, json=body[0]), httpx.Response(200, json=body)]
+    )
+    assert len(_client().hourly(POINTS, START, END)) == 2
+
+
+@respx.mock
+def test_timeouts_are_retried_then_reported_as_busy(no_backoff: None) -> None:
     route = respx.get(URL).mock(side_effect=httpx.ReadTimeout("slow"))
-    with pytest.raises(UpstreamError, match="ReadTimeout"):
+    with pytest.raises(TransientUpstreamError) as info:
         _client().hourly(POINTS, START, END)
-    assert route.call_count == 2
+    assert route.call_count == 3
+    assert info.value.details["cause"] == "ReadTimeout"
 
 
 @respx.mock
-def test_timeout_then_success_recovers() -> None:
+def test_timeout_then_success_recovers(no_backoff: None) -> None:
     body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())
     route = respx.get(URL).mock(
         side_effect=[httpx.ReadTimeout("slow"), httpx.Response(200, json=body)]
@@ -120,20 +141,21 @@ def test_empty_points_short_circuit() -> None:
 
 @respx.mock
 def test_rate_limit_is_retried_once_then_surfaces_as_503(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(client_module, "RETRY_AFTER_RATE_LIMIT_SECONDS", 0)
+    monkeypatch.setattr(client_module, "RETRY_BACKOFF_SECONDS", 0)
     route = respx.get(URL).mock(
         return_value=httpx.Response(429, json={"reason": "Minutely API request limit exceeded"})
     )
     with pytest.raises(RateLimitedError) as info:
         _client().hourly(POINTS, START, END)
     assert route.call_count == 3  # initial + 2 retries
+    assert info.value.code == "rate_limited"
     assert info.value.http_status == 503
     assert "try again" in info.value.message
 
 
 @respx.mock
 def test_overloaded_upstream_is_treated_as_transient(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(client_module, "RETRY_AFTER_RATE_LIMIT_SECONDS", 0)
+    monkeypatch.setattr(client_module, "RETRY_BACKOFF_SECONDS", 0)
     body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())
     route = respx.get(URL).mock(
         side_effect=[
@@ -147,7 +169,7 @@ def test_overloaded_upstream_is_treated_as_transient(monkeypatch: pytest.MonkeyP
 
 @respx.mock
 def test_rate_limit_then_success_recovers(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(client_module, "RETRY_AFTER_RATE_LIMIT_SECONDS", 0)
+    monkeypatch.setattr(client_module, "RETRY_BACKOFF_SECONDS", 0)
     body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())
     respx.get(URL).mock(side_effect=[httpx.Response(429, json={}), httpx.Response(200, json=body)])
     assert len(_client().hourly(POINTS, START, END)) == 2

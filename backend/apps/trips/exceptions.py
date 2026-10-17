@@ -45,9 +45,15 @@ class UpstreamError(DomainError):
     http_status: int = status.HTTP_502_BAD_GATEWAY
 
 
-class RateLimitedError(UpstreamError):
-    code: str = "rate_limited"
+class TransientUpstreamError(UpstreamError):
+    """A provider failure that is worth retrying: timeouts, 5xx, malformed answers."""
+
+    code: str = "provider_busy"
     http_status: int = status.HTTP_503_SERVICE_UNAVAILABLE
+
+
+class RateLimitedError(TransientUpstreamError):
+    code: str = "rate_limited"
 
 
 class ConfigurationError(DomainError):

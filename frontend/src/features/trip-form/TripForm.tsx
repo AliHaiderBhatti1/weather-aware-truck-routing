@@ -192,7 +192,7 @@ export function TripForm({ onSubmit, pending, error, defaultValues, onCancel }: 
               ))}
             </ul>
           )}
-          {error.code === 'rate_limited' && (
+          {(error.code === 'rate_limited' || error.code === 'provider_busy') && (
             <p className="mt-1">
               Nothing is wrong with your trip; the forecast provider is throttling. Retry in a
               moment.

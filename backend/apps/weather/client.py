@@ -20,7 +20,7 @@ import httpx
 from django.conf import settings
 
 from apps.geo.types import GeoPoint
-from apps.trips.exceptions import RateLimitedError, UpstreamError
+from apps.trips.exceptions import RateLimitedError, TransientUpstreamError, UpstreamError
 from apps.weather.types import HourlySeries
 
 logger = logging.getLogger(__name__)
@@ -44,9 +44,11 @@ RISK_ONLY_FIELDS = ("wind_speed_10m", "rain", "showers", "snowfall")
 DEFAULT_CHUNK_SIZE = 40
 FAST_CHUNK_SIZE = 12
 MAX_CONCURRENT_REQUESTS = 6
-RETRIES_ON_TIMEOUT = 1
-RETRY_AFTER_RATE_LIMIT_SECONDS = 2.0
-RETRIES_ON_TRANSIENT = 2
+# Transient failures (timeouts, 429/5xx, malformed answers) are retried with a
+# linear backoff: 1.5 s, then 3 s.
+TRANSIENT_RETRIES = 2
+RETRY_BACKOFF_SECONDS = 1.5
+BUSY_MESSAGE = "The weather service is busy right now. Please try again in a minute."
 
 
 class OpenMeteoClient:
@@ -101,17 +103,17 @@ class OpenMeteoClient:
         while True:
             try:
                 return self._fetch_chunk(points, start, end, fields)
-            except RateLimitedError:
+            except TransientUpstreamError as exc:
                 attempt += 1
-                if attempt > RETRIES_ON_TRANSIENT:
+                if attempt > TRANSIENT_RETRIES:
                     raise
-                logger.info("Open-Meteo busy; retrying chunk after a short pause")
-                time.sleep(RETRY_AFTER_RATE_LIMIT_SECONDS * attempt)
-            except UpstreamError as exc:
-                attempt += 1
-                if attempt > RETRIES_ON_TIMEOUT or "Timeout" not in exc.message:
-                    raise
-                logger.info("Open-Meteo timed out; retrying chunk of %d points", len(points))
+                logger.info(
+                    "Open-Meteo transient failure (%s); retry %d for %d points",
+                    exc.details or exc.message,
+                    attempt,
+                    len(points),
+                )
+                time.sleep(RETRY_BACKOFF_SECONDS * attempt)
 
     def _fetch_chunk(
         self,
@@ -133,32 +135,48 @@ class OpenMeteoClient:
         }
         try:
             response = self._http.get(self._base_url, params=params)
+        except httpx.TransportError as exc:  # timeouts, connection resets, DNS
+            raise TransientUpstreamError(
+                BUSY_MESSAGE, details={"provider": "open-meteo", "cause": type(exc).__name__}
+            ) from exc
         except httpx.HTTPError as exc:
             raise UpstreamError(f"Open-Meteo request failed: {exc.__class__.__name__}") from exc
 
         payload = _safe_json(response)
-        if response.status_code == 429 or response.status_code >= 500:
-            # Rate limit or an overloaded upstream: both are transient.
-            reason = payload.get("reason") if isinstance(payload, dict) else None
-            logger.warning("Open-Meteo transient failure %s %s", response.status_code, reason)
-            raise RateLimitedError(
-                "The weather service is busy right now. Please try again in a minute.",
-                details={"provider": "open-meteo", "status": response.status_code},
+        reason = payload.get("reason") if isinstance(payload, dict) else None
+        if response.status_code == 429:
+            logger.warning("Open-Meteo rate limit: %s", reason)
+            raise RateLimitedError(BUSY_MESSAGE, details={"provider": "open-meteo", "status": 429})
+        if response.status_code >= 500:
+            logger.warning("Open-Meteo %s: %s", response.status_code, reason)
+            raise TransientUpstreamError(
+                BUSY_MESSAGE, details={"provider": "open-meteo", "status": response.status_code}
             )
         if response.status_code >= 400:
-            reason = payload.get("reason") if isinstance(payload, dict) else None
             logger.warning("Open-Meteo -> %s %s", response.status_code, reason)
             raise UpstreamError(
                 f"Open-Meteo returned HTTP {response.status_code}",
                 details={"reason": reason} if reason else None,
             )
 
-        # One location -> object; many -> list of objects.
+        # One location -> object; many -> list of objects. Under load the API
+        # occasionally answers a multi-location request with a single object,
+        # so a count mismatch is treated as transient and retried.
         entries = payload if isinstance(payload, list) else [payload]
-        if len(entries) != len(points):
-            raise UpstreamError(
-                "Open-Meteo returned an unexpected number of locations",
-                details={"expected": len(points), "received": len(entries)},
+        if len(entries) != len(points) or not all(isinstance(e, dict) for e in entries):
+            logger.warning(
+                "Open-Meteo malformed answer: expected %d locations, got %s (reason=%s)",
+                len(points),
+                f"list of {len(entries)}" if isinstance(payload, list) else type(payload).__name__,
+                reason,
+            )
+            raise TransientUpstreamError(
+                BUSY_MESSAGE,
+                details={
+                    "provider": "open-meteo",
+                    "expected": len(points),
+                    "received": len(entries),
+                },
             )
         return [_parse_series(point, entry) for point, entry in zip(points, entries, strict=True)]
 
