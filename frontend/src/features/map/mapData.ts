@@ -7,7 +7,6 @@ import type { Checkpoint, PlannedRoute, TripPlan } from '@/lib/types'
 export interface RouteFeatureProps {
   routeId: string
   rank: number
-  selected: boolean
 }
 
 export interface SegmentFeatureProps {
@@ -20,15 +19,14 @@ export interface CheckpointFeatureProps {
   routeId: string
   index: number
   level: RiskLevel | 'unknown'
-  selected: boolean
   /** Hour offset from the forecast window start, used to sync with the slider. */
   hourIndex: number
   isEndpoint: boolean
 }
 
-export interface MapData {
+/** Sources that depend only on the plan; selection is applied with layer filters. */
+export interface PlanSources {
   routes: FeatureCollection<LineString, RouteFeatureProps>
-  segments: FeatureCollection<LineString, SegmentFeatureProps>
   checkpoints: FeatureCollection<Point, CheckpointFeatureProps>
 }
 
@@ -37,11 +35,11 @@ export function hourIndexFor(eta: string, windowStart: string): number {
   return Math.max(0, Math.floor(diff / 3_600_000))
 }
 
-function routeLine(route: PlannedRoute, selected: boolean): Feature<LineString, RouteFeatureProps> {
+function routeLine(route: PlannedRoute): Feature<LineString, RouteFeatureProps> {
   return {
     type: 'Feature',
     geometry: route.geometry,
-    properties: { routeId: route.id, rank: route.rank, selected },
+    properties: { routeId: route.id, rank: route.rank },
   }
 }
 
@@ -75,7 +73,6 @@ function riskSegments(route: PlannedRoute): Feature<LineString, SegmentFeaturePr
 
 function checkpointPoints(
   route: PlannedRoute,
-  selected: boolean,
   windowStart: string,
 ): Feature<Point, CheckpointFeatureProps>[] {
   return route.checkpoints.map((checkpoint) => ({
@@ -85,32 +82,38 @@ function checkpointPoints(
       routeId: route.id,
       index: checkpoint.index,
       level: checkpoint.risk?.level ?? 'unknown',
-      selected,
       hourIndex: hourIndexFor(checkpoint.eta, windowStart),
       isEndpoint: checkpoint.index === 0 || checkpoint.index === route.checkpoints.length - 1,
     },
   }))
 }
 
-/** Build every GeoJSON source the map needs from a plan and the selected route. */
-export function buildMapData(plan: TripPlan, selectedRouteId: string | null): MapData {
-  const selected = plan.routes.find((r) => r.id === selectedRouteId) ?? plan.routes[0]
+/** The selected route's id, falling back to the first route. */
+export function resolveSelectedRouteId(
+  plan: TripPlan,
+  selectedRouteId: string | null,
+): string | null {
+  return plan.routes.find((r) => r.id === selectedRouteId)?.id ?? plan.routes[0]?.id ?? null
+}
+
+/** Route lines and checkpoints for every route, built once per plan. */
+export function buildPlanSources(plan: TripPlan): PlanSources {
   const windowStart = plan.forecast_window.start
   return {
-    routes: {
-      type: 'FeatureCollection',
-      features: plan.routes.map((route) => routeLine(route, route.id === selected?.id)),
-    },
-    segments: {
-      type: 'FeatureCollection',
-      features: selected ? riskSegments(selected) : [],
-    },
+    routes: { type: 'FeatureCollection', features: plan.routes.map(routeLine) },
     checkpoints: {
       type: 'FeatureCollection',
-      // Selected route last so its markers draw on top.
-      features: [...plan.routes]
-        .sort((a) => (a.id === selected?.id ? 1 : -1))
-        .flatMap((route) => checkpointPoints(route, route.id === selected?.id, windowStart)),
+      features: plan.routes.flatMap((route) => checkpointPoints(route, windowStart)),
     },
   }
+}
+
+/** Risk-coloured segments for the selected route only. */
+export function buildSegments(
+  plan: TripPlan,
+  selectedRouteId: string | null,
+): FeatureCollection<LineString, SegmentFeatureProps> {
+  const id = resolveSelectedRouteId(plan, selectedRouteId)
+  const route = plan.routes.find((r) => r.id === id)
+  return { type: 'FeatureCollection', features: route ? riskSegments(route) : [] }
 }

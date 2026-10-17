@@ -26,8 +26,10 @@ import {
   SEGMENTS,
   SEGMENTS_CASING,
   UNDERLAY_BEFORE_LAYER_ID,
+  isNotRoute,
+  isRoute,
 } from './layers'
-import { buildMapData } from './mapData'
+import { buildPlanSources, buildSegments, resolveSelectedRouteId } from './mapData'
 import { RouteLabels } from './RouteLabels'
 
 const MAP_STYLE =
@@ -67,9 +69,27 @@ export function MapView({
   const [hover, setHover] = useState<Hover | null>(null)
   const [cursor, setCursor] = useState<string>('grab')
 
-  const data = useMemo(
-    () => (plan ? buildMapData(plan, selectedRouteId) : null),
+  // Route lines and checkpoints depend on the plan only, so they are uploaded
+  // to the map once per plan. Selection is expressed with layer filters and
+  // only the selected route's coloured segments are rebuilt when it changes.
+  const sources = useMemo(() => (plan ? buildPlanSources(plan) : null), [plan])
+  const segments = useMemo(
+    () => (plan ? buildSegments(plan, selectedRouteId) : null),
     [plan, selectedRouteId],
+  )
+  const selectedId = plan ? resolveSelectedRouteId(plan, selectedRouteId) : null
+  const selectionLayers = useMemo(
+    () => ({
+      routesOtherCasing: { ...ROUTES_OTHER_CASING, filter: isNotRoute(selectedId) },
+      routesOther: { ...ROUTES_OTHER, filter: isNotRoute(selectedId) },
+      checkpointsOther: { ...CHECKPOINTS_OTHER, filter: isNotRoute(selectedId) },
+      checkpoints: { ...CHECKPOINTS, filter: isRoute(selectedId) },
+    }),
+    [selectedId],
+  )
+  const activeHour = useMemo(
+    () => activeHourLayer(activeHourIndex, selectedId),
+    [activeHourIndex, selectedId],
   )
 
   const fitToPlan = useCallback(() => {
@@ -136,7 +156,7 @@ export function MapView({
       // The map can be hidden (phone tab) or resized after the fit; refit so the
       // trip is always framed when it becomes visible.
       onResize={fitToPlan}
-      interactiveLayerIds={data ? [CHECKPOINTS.id!, ROUTES_HIT_LAYER.id!] : []}
+      interactiveLayerIds={sources ? [CHECKPOINTS.id!, ROUTES_HIT_LAYER.id!] : []}
       onMouseMove={onMouseMove}
       onMouseLeave={() => setHover(null)}
       onClick={onClick}
@@ -147,21 +167,21 @@ export function MapView({
       <NavigationControl position="top-right" showCompass={false} />
       <ScaleControl unit="imperial" position="bottom-right" />
 
-      {data && (
+      {sources && segments && (
         <>
-          <Source id="routes" type="geojson" data={data.routes}>
-            <Layer {...ROUTES_OTHER_CASING} />
-            <Layer {...ROUTES_OTHER} />
+          <Source id="routes" type="geojson" data={sources.routes}>
+            <Layer {...selectionLayers.routesOtherCasing} />
+            <Layer {...selectionLayers.routesOther} />
             <Layer {...ROUTES_HIT_LAYER} />
           </Source>
-          <Source id="segments" type="geojson" data={data.segments}>
+          <Source id="segments" type="geojson" data={segments}>
             <Layer {...SEGMENTS_CASING} />
             <Layer {...SEGMENTS} />
           </Source>
-          <Source id="checkpoints" type="geojson" data={data.checkpoints}>
-            <Layer {...CHECKPOINTS_OTHER} />
-            <Layer {...CHECKPOINTS} />
-            <Layer {...activeHourLayer(activeHourIndex)} />
+          <Source id="checkpoints" type="geojson" data={sources.checkpoints}>
+            <Layer {...selectionLayers.checkpointsOther} />
+            <Layer {...selectionLayers.checkpoints} />
+            <Layer {...activeHour} />
           </Source>
           {/* Rendered after the route sources so their layers exist when the
               underlay is inserted beneath the lowest of them. */}

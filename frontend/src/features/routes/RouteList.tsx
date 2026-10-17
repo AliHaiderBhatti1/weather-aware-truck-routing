@@ -1,4 +1,5 @@
 import { Award, ShieldAlert } from 'lucide-react'
+import { memo } from 'react'
 
 import { Alert } from '@/components/ui'
 import type { TripPlan } from '@/lib/types'
@@ -11,7 +12,12 @@ interface RouteListProps {
   onSelectRoute: (routeId: string) => void
 }
 
-export function RouteList({ plan, selectedRouteId, onSelectRoute }: RouteListProps) {
+/** Memoised so scrubbing the forecast slider doesn't re-render cards and tables. */
+export const RouteList = memo(function RouteList({
+  plan,
+  selectedRouteId,
+  onSelectRoute,
+}: RouteListProps) {
   const recommended = plan.routes.find((r) => r.id === plan.recommended_route_id)
   return (
     <section className="flex flex-col gap-3" aria-label="Route options">
@@ -55,4 +61,4 @@ export function RouteList({ plan, selectedRouteId, onSelectRoute }: RouteListPro
       ))}
     </section>
   )
-}
+})

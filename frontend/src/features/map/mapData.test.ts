@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { TripPlan } from '@/lib/types'
 
-import { buildMapData, hourIndexFor } from './mapData'
+import { buildPlanSources, buildSegments, hourIndexFor, resolveSelectedRouteId } from './mapData'
 
 const plan = {
   id: 'p',
@@ -89,10 +89,9 @@ const plan = {
   ],
 } as unknown as TripPlan
 
-describe('buildMapData', () => {
+describe('map data builders', () => {
   it('gives each checkpoint the road half-way to its neighbours', () => {
-    const data = buildMapData(plan, 'a')
-    const segments = data.segments.features
+    const segments = buildSegments(plan, 'a').features
     expect(segments.map((f) => f.properties.level)).toEqual(['low', 'severe', 'unknown'])
     expect(segments[0].geometry.coordinates[0]).toEqual([0, 0])
     // Cuts at the midpoints between checkpoints (lon 0.5 and 1.5 on this line).
@@ -101,21 +100,21 @@ describe('buildMapData', () => {
     expect(segments[2].geometry.coordinates.at(-1)).toEqual([2, 0])
   })
 
-  it('marks the selected route and orders its checkpoints last', () => {
-    const data = buildMapData(plan, 'a')
-    expect(data.routes.features.map((f) => f.properties.selected)).toEqual([true, false])
-    expect(data.checkpoints.features.every((f) => f.properties.selected)).toBe(true)
-    expect(data.checkpoints.features.map((f) => f.properties.hourIndex)).toEqual([0, 1, 3])
-    expect(data.checkpoints.features.map((f) => f.properties.isEndpoint)).toEqual([
+  it('builds route lines and checkpoints for every route, independent of selection', () => {
+    const sources = buildPlanSources(plan)
+    expect(sources.routes.features.map((f) => f.properties.routeId)).toEqual(['a', 'b'])
+    expect(sources.checkpoints.features.map((f) => f.properties.hourIndex)).toEqual([0, 1, 3])
+    expect(sources.checkpoints.features.map((f) => f.properties.isEndpoint)).toEqual([
       true,
       false,
       true,
     ])
+    expect(buildPlanSources(plan)).toEqual(sources) // pure: same plan, same data
   })
 
   it('falls back to the first route when the selection is unknown', () => {
-    const data = buildMapData(plan, 'nope')
-    expect(data.segments.features).toHaveLength(3)
+    expect(resolveSelectedRouteId(plan, 'nope')).toBe('a')
+    expect(buildSegments(plan, 'nope').features).toHaveLength(3)
   })
 
   it('computes hour offsets from the forecast window start', () => {

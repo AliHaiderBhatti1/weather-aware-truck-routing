@@ -1,5 +1,7 @@
 import { ArrowRight, CalendarClock, Pencil, RotateCcw, Weight } from 'lucide-react'
 
+import { memo } from 'react'
+
 import { Button } from '@/components/ui'
 import { formatDayTime, formatPounds } from '@/lib/format'
 import type { TripPlan } from '@/lib/types'
@@ -10,7 +12,7 @@ interface TripSummaryProps {
   onReset: () => void
 }
 
-export function TripSummary({ plan, onEdit, onReset }: TripSummaryProps) {
+export const TripSummary = memo(function TripSummary({ plan, onEdit, onReset }: TripSummaryProps) {
   const { origin, destination, departure_time, load_weight_lb, checkpoint_interval_miles } =
     plan.request
   return (
@@ -52,4 +54,4 @@ export function TripSummary({ plan, onEdit, onReset }: TripSummaryProps) {
       </div>
     </div>
   )
-}
+})

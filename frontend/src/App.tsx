@@ -46,15 +46,17 @@ export default function App() {
   const maxHour = plan?.forecast_window.hours ?? 48
   const changeHour = useCallback((next: number) => setHour(clampHour(next, maxHour)), [maxHour])
 
-  const resetTrip = () => {
-    planMutation.reset()
+  const resetMutation = planMutation.reset
+  const resetTrip = useCallback(() => {
+    resetMutation()
     setPlanId(null)
     writePlanIdToUrl(null)
     setEditing(false)
     setSelectedRouteId(null)
     setHour(0)
     setMobileView('plan')
-  }
+  }, [resetMutation])
+  const startEditing = useCallback(() => setEditing(true), [])
 
   const editDefaults = plan
     ? {
@@ -107,7 +109,7 @@ export default function App() {
               />
             </Card>
           ) : (
-            <TripSummary plan={plan} onEdit={() => setEditing(true)} onReset={resetTrip} />
+            <TripSummary plan={plan} onEdit={startEditing} onReset={resetTrip} />
           )}
 
           {planQuery.isError && (

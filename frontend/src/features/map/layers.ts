@@ -1,3 +1,4 @@
+import type { FilterSpecification } from 'maplibre-gl'
 import type { LayerProps } from 'react-map-gl/maplibre'
 
 import { RISK_LEVELS, RISK_META, UNKNOWN_RISK_COLOR } from '@/lib/risk'
@@ -19,7 +20,6 @@ export const ROUTES_HIT_LAYER: LayerProps = {
 export const ROUTES_OTHER_CASING: LayerProps = {
   id: 'routes-other-casing',
   type: 'line',
-  filter: ['!', ['get', 'selected']],
   paint: { 'line-color': '#ffffff', 'line-width': 7, 'line-opacity': 0.9 },
   layout: { 'line-cap': 'round', 'line-join': 'round' },
 }
@@ -27,7 +27,6 @@ export const ROUTES_OTHER_CASING: LayerProps = {
 export const ROUTES_OTHER: LayerProps = {
   id: 'routes-other',
   type: 'line',
-  filter: ['!', ['get', 'selected']],
   paint: { 'line-color': '#64748b', 'line-width': 3.5, 'line-opacity': 0.75 },
   layout: { 'line-cap': 'round', 'line-join': 'round' },
 }
@@ -49,7 +48,6 @@ export const SEGMENTS: LayerProps = {
 export const CHECKPOINTS_OTHER: LayerProps = {
   id: 'checkpoints-other',
   type: 'circle',
-  filter: ['!', ['get', 'selected']],
   paint: {
     'circle-radius': 3.5,
     'circle-color': LEVEL_COLOR_EXPRESSION as unknown as string,
@@ -62,7 +60,6 @@ export const CHECKPOINTS_OTHER: LayerProps = {
 export const CHECKPOINTS: LayerProps = {
   id: 'checkpoints',
   type: 'circle',
-  filter: ['get', 'selected'],
   paint: {
     'circle-radius': ['case', ['get', 'isEndpoint'], 7, 6],
     'circle-color': LEVEL_COLOR_EXPRESSION as unknown as string,
@@ -71,12 +68,19 @@ export const CHECKPOINTS: LayerProps = {
   },
 }
 
-/** Ring drawn around checkpoints whose ETA falls in the slider's current hour. */
-export function activeHourLayer(hourIndex: number | null): LayerProps {
+/** Ring drawn around the selected route's checkpoints whose ETA falls in the slider's hour. */
+export function activeHourLayer(
+  hourIndex: number | null,
+  selectedRouteId: string | null,
+): LayerProps {
   return {
     id: 'checkpoints-active-hour',
     type: 'circle',
-    filter: ['all', ['get', 'selected'], ['==', ['get', 'hourIndex'], hourIndex ?? -1]],
+    filter: [
+      'all',
+      ['==', ['get', 'routeId'], selectedRouteId ?? ''],
+      ['==', ['get', 'hourIndex'], hourIndex ?? -1],
+    ],
     paint: {
       'circle-radius': 13,
       'circle-color': 'rgba(0,0,0,0)',
@@ -89,3 +93,12 @@ export function activeHourLayer(hourIndex: number | null): LayerProps {
 
 /** The lowest route layer; anything drawn under the routes is inserted before it. */
 export const UNDERLAY_BEFORE_LAYER_ID = ROUTES_OTHER_CASING.id!
+
+/** Filter matching features of one route; selection changes never re-upload data. */
+export function isRoute(routeId: string | null): FilterSpecification {
+  return ['==', ['get', 'routeId'], routeId ?? '']
+}
+
+export function isNotRoute(routeId: string | null): FilterSpecification {
+  return ['!=', ['get', 'routeId'], routeId ?? '']
+}
