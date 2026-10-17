@@ -5,6 +5,7 @@ import { MobileTabs, type MobileView } from '@/components/MobileTabs'
 import { Alert, Card } from '@/components/ui'
 import { ApiStatusBanner } from '@/features/health/ApiStatusBanner'
 import { ForecastSlider } from '@/features/heatmap/ForecastSlider'
+import { clampHour } from '@/features/heatmap/heatmapData'
 import { HeatmapLayer } from '@/features/heatmap/HeatmapLayer'
 import { useHeatmap } from '@/features/heatmap/useHeatmap'
 import { MapLegend } from '@/features/map/MapLegend'
@@ -39,6 +40,11 @@ export default function App() {
   }, [])
   const planMutation = usePlanTrip(onPlanned)
   const heatmapQuery = useHeatmap(plan?.id ?? null)
+
+  // Checkpoints can be reached after the 48 h window on long trips; never let
+  // the slider (or the heatmap expression) go past its end.
+  const maxHour = plan?.forecast_window.hours ?? 48
+  const changeHour = useCallback((next: number) => setHour(clampHour(next, maxHour)), [maxHour])
 
   const resetTrip = () => {
     planMutation.reset()
@@ -131,7 +137,7 @@ export default function App() {
           plan={plan}
           selectedRouteId={selectedRouteId}
           onSelectRoute={setSelectedRouteId}
-          onCheckpointClick={setHour}
+          onCheckpointClick={changeHour}
           activeHourIndex={plan ? hour : null}
           renderUnderlay={(beforeId) =>
             heatmapQuery.data ? (
@@ -153,7 +159,7 @@ export default function App() {
               plan={plan}
               selectedRoute={selectedRoute}
               hour={hour}
-              onHourChange={setHour}
+              onHourChange={changeHour}
               visible={heatmapVisible}
               onToggleVisible={() => setHeatmapVisible((v) => !v)}
               loading={heatmapQuery.isPending}

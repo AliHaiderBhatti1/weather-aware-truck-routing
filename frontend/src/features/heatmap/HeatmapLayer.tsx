@@ -4,7 +4,7 @@ import { Layer, type LayerProps, Source } from 'react-map-gl/maplibre'
 import { RISK_META } from '@/lib/risk'
 import type { Heatmap } from '@/lib/types'
 
-import { buildHeatmapGeo, cellRadiusAtZoom0 } from './heatmapData'
+import { buildHeatmapGeo, cellRadiusAtZoom0, clampHour } from './heatmapData'
 
 interface HeatmapLayerProps {
   heatmap: Heatmap
@@ -26,7 +26,9 @@ export function HeatmapLayer({ heatmap, hourIndex, visible, beforeId }: HeatmapL
   const geo = useMemo(() => buildHeatmapGeo(heatmap), [heatmap])
 
   const layer = useMemo((): LayerProps => {
-    const level = ['at', hourIndex, ['get', 'levels']]
+    // An out-of-range index would make the expression fail and MapLibre would
+    // fall back to opaque black circles, so clamp defensively here too.
+    const level = ['at', clampHour(hourIndex, heatmap.hours.length - 1), ['get', 'levels']]
     const r0 = cellRadiusAtZoom0(geo.spacingDeg, geo.centerLat)
     const colorByLevel = [
       'match',
@@ -57,7 +59,7 @@ export function HeatmapLayer({ heatmap, hourIndex, visible, beforeId }: HeatmapL
         'circle-opacity': opacityByLevel as unknown as number,
       },
     }
-  }, [geo, hourIndex, visible])
+  }, [geo, hourIndex, visible, heatmap.hours.length])
 
   return (
     <Source id="corridor-heatmap-source" type="geojson" data={geo.collection}>

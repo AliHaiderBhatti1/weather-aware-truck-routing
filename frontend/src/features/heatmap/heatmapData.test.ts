@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildHeatmapGeo, cellRadiusAtZoom0 } from './heatmapData'
+import { buildHeatmapGeo, cellRadiusAtZoom0, clampHour } from './heatmapData'
 
 describe('heatmap geo', () => {
   it('derives grid spacing from the smallest coordinate gap', () => {
@@ -22,5 +22,14 @@ describe('heatmap geo', () => {
   it('grows the cell radius away from the equator', () => {
     expect(cellRadiusAtZoom0(0.1, 60)).toBeGreaterThan(cellRadiusAtZoom0(0.1, 0))
     expect(cellRadiusAtZoom0(0, 0)).toBeGreaterThan(0)
+  })
+})
+
+describe('clampHour', () => {
+  it('keeps hours inside the forecast window', () => {
+    expect(clampHour(60, 48)).toBe(48) // checkpoint ETA beyond the 48 h window
+    expect(clampHour(-3, 48)).toBe(0)
+    expect(clampHour(12.4, 48)).toBe(12)
+    expect(clampHour(Number.NaN, 48)).toBe(0)
   })
 })

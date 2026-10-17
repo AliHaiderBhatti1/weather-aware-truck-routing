@@ -52,3 +52,9 @@ export function cellRadiusAtZoom0(spacingDeg: number, centerLat: number): number
   const latScale = 1 / Math.max(Math.cos((centerLat * Math.PI) / 180), 0.2)
   return Math.max(spacingDeg * pxPerDeg * latScale * 1.2, 0.05)
 }
+
+/** Keep a forecast hour index inside the heatmap's window (0..maxHour). */
+export function clampHour(hour: number, maxHour: number): number {
+  if (!Number.isFinite(hour)) return 0
+  return Math.min(Math.max(0, Math.round(hour)), Math.max(0, maxHour))
+}
