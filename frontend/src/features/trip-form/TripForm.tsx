@@ -141,7 +141,7 @@ export function TripForm({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[3fr_2fr]">
         <Field label="Departure" htmlFor="departure" error={errors.departure?.message}>
           <input
             id="departure"

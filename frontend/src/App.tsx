@@ -93,7 +93,7 @@ export default function App() {
     <div className="flex h-dvh flex-col lg:flex-row">
       <aside
         className={cn(
-          'w-full shrink-0 flex-col bg-white lg:flex lg:h-full lg:w-[440px] lg:border-r lg:border-slate-200',
+          'w-full shrink-0 flex-col bg-white lg:flex lg:h-full lg:w-[480px] lg:border-r lg:border-slate-200',
           mobileView === 'map' ? 'hidden' : 'flex min-h-0 flex-1 lg:flex-none',
         )}
       >
