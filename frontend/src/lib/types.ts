@@ -109,6 +109,8 @@ export interface HeatmapPoint {
 }
 
 export interface Heatmap {
+  /** False when the weather service failed for part of the corridor. */
+  complete?: boolean
   start: string
   hours: string[]
   points: HeatmapPoint[]

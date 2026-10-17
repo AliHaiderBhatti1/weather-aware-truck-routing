@@ -74,9 +74,9 @@ class TripPlanner:
                 for route in routes
             }
         with timer.stage("weather"):
-            assessed = self._assess_all(checkpoints_by_route, request.load_lb)
+            assessed, unavailable = self._assess_all(checkpoints_by_route, request.load_lb)
         with timer.stage("rank"):
-            result = self._build_result(request, routes, assessed)
+            result = self._build_result(request, routes, assessed, unavailable)
         logger.info(
             "plan %s -> %s: %s", request.origin.name, request.destination.name, timer.summary()
         )
@@ -87,6 +87,7 @@ class TripPlanner:
         request: PlanRequest,
         routes: list[Route],
         assessed: dict[str, list[AssessedCheckpoint]],
+        unavailable: int = 0,
     ) -> dict[str, Any]:
         summaries = [
             summarize_route(
@@ -105,10 +106,10 @@ class TripPlanner:
         ordered = rank_routes(summaries)
         ranked = {item.summary.route_id: item for item in ordered}
 
-        warnings = self._warnings(routes, assessed)
+        warnings = self._warnings(routes, assessed, unavailable)
         recommended = next((r for r in ordered if r.recommended), None)
         if recommended is None:
-            warnings.append(_no_recommendation_reason(ordered[0].summary))
+            warnings.append(_no_recommendation_reason(ordered[0].summary, unavailable))
 
         route_payloads = sorted(
             (
@@ -145,23 +146,25 @@ class TripPlanner:
 
     def _assess_all(
         self, checkpoints_by_route: dict[str, list[Checkpoint]], load_lb: int
-    ) -> dict[str, list[AssessedCheckpoint]]:
+    ) -> tuple[dict[str, list[AssessedCheckpoint]], int]:
         """One batched weather call for every checkpoint of every route."""
         flat: list[tuple[str, Checkpoint]] = [
             (route_id, checkpoint)
             for route_id, checkpoints in checkpoints_by_route.items()
             for checkpoint in checkpoints
         ]
-        samples = self._weather.samples_at([(cp.point, cp.eta) for _, cp in flat])
+        batch = self._weather.samples_at([(cp.point, cp.eta) for _, cp in flat])
 
         assessed: dict[str, list[AssessedCheckpoint]] = {rid: [] for rid in checkpoints_by_route}
-        for (route_id, checkpoint), sample in zip(flat, samples, strict=True):
+        for (route_id, checkpoint), sample in zip(flat, batch.samples, strict=True):
             risk = assess(sample, load_lb) if sample is not None else None
             assessed[route_id].append(AssessedCheckpoint(checkpoint, sample, risk))
-        return assessed
+        return assessed, batch.unavailable
 
     @staticmethod
-    def _warnings(routes: list[Route], assessed: dict[str, list[AssessedCheckpoint]]) -> list[str]:
+    def _warnings(
+        routes: list[Route], assessed: dict[str, list[AssessedCheckpoint]], unavailable: int
+    ) -> list[str]:
         warnings: list[str] = []
         if len(routes) < 3:
             count = len(routes)
@@ -170,7 +173,12 @@ class TripPlanner:
                 "between these places."
             )
         missing = sum(1 for items in assessed.values() for item in items if item.risk is None)
-        if missing:
+        if unavailable:
+            warnings.append(
+                f"The weather service didn't answer for {unavailable} checkpoint(s); their miles "
+                "are shown as unknown. Plan again in a minute for a complete picture."
+            )
+        elif missing:
             warnings.append(
                 f"Forecast data was unavailable for {missing} checkpoint(s); "
                 "their miles are shown as unknown rather than assumed safe."
@@ -178,12 +186,14 @@ class TripPlanner:
         return warnings
 
 
-def _no_recommendation_reason(best: RouteRiskSummary) -> str:
+def _no_recommendation_reason(best: RouteRiskSummary, unavailable: int) -> str:
     if not best.is_travel_advised:
         return (
             "Every route contains No-Travel conditions at the planned departure time. "
             "Consider delaying the trip."
         )
+    if unavailable:
+        return "Too little forecast data came back to recommend a route safely."
     return (
         "Forecasts don't cover enough of any route to recommend one. "
         "Choose a departure closer to now."

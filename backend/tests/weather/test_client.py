@@ -101,7 +101,7 @@ def test_location_count_mismatch_is_retried_then_reported_as_busy(no_backoff: No
     with pytest.raises(TransientUpstreamError) as info:
         _client().hourly(POINTS, START, END)
 
-    assert route.call_count == 3  # initial attempt + 2 retries
+    assert route.call_count == 2  # initial attempt + 1 retry
     assert info.value.code == "provider_busy"
     assert info.value.http_status == 503
     assert info.value.details["expected"] == 2
@@ -121,7 +121,7 @@ def test_timeouts_are_retried_then_reported_as_busy(no_backoff: None) -> None:
     route = respx.get(URL).mock(side_effect=httpx.ReadTimeout("slow"))
     with pytest.raises(TransientUpstreamError) as info:
         _client().hourly(POINTS, START, END)
-    assert route.call_count == 3
+    assert route.call_count == 2
     assert info.value.details["cause"] == "ReadTimeout"
 
 
@@ -147,7 +147,7 @@ def test_rate_limit_is_retried_once_then_surfaces_as_503(monkeypatch: pytest.Mon
     )
     with pytest.raises(RateLimitedError) as info:
         _client().hourly(POINTS, START, END)
-    assert route.call_count == 3  # initial + 2 retries
+    assert route.call_count == 2  # initial + 1 retry
     assert info.value.code == "rate_limited"
     assert info.value.http_status == 503
     assert "try again" in info.value.message
@@ -201,3 +201,50 @@ def test_missing_values_stay_unknown_instead_of_becoming_zero() -> None:
     ]  # rain + showers; one present is enough
     # 08:10 needs the 08:00 wind reading, which is missing, so the sample is unknown.
     assert series.sample_at(START.replace(minute=10)) is None
+
+
+@respx.mock
+def test_requests_in_flight_never_exceed_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+    import time as time_module
+
+    body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())[0]
+    lock = threading.Lock()
+    state = {"now": 0, "peak": 0}
+
+    def slow_response(request: httpx.Request) -> httpx.Response:
+        with lock:
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+        time_module.sleep(0.05)
+        with lock:
+            state["now"] -= 1
+        return httpx.Response(200, json=body)
+
+    respx.get(URL).mock(side_effect=slow_response)
+    points = [GeoPoint(40 + i / 10, -105.0) for i in range(12)]
+
+    series = _client().hourly(points, START, END, chunk_size=1)
+
+    assert len(series) == 12
+    assert state["peak"] <= client_module.MAX_CONCURRENT_REQUESTS
+
+
+@respx.mock
+def test_partial_mode_returns_none_for_chunks_that_keep_failing(
+    no_backoff: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(client_module, "MAX_CONCURRENT_REQUESTS", 1)
+    body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())[0]
+    respx.get(URL).mock(
+        side_effect=[
+            httpx.Response(200, json=body),  # chunk 1 ok
+            httpx.ReadTimeout("slow"),  # chunk 2 fails...
+            httpx.ReadTimeout("slow"),  # ...and its retry fails too
+        ]
+    )
+
+    series = _client().hourly(POINTS, START, END, chunk_size=1, allow_partial=True)
+
+    assert series[0] is not None
+    assert series[1] is None

@@ -10,11 +10,13 @@ conversion happens downstream.
 from __future__ import annotations
 
 import logging
+import random
+import threading
 import time
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal, overload
 
 import httpx
 from django.conf import settings
@@ -43,11 +45,18 @@ RISK_ONLY_FIELDS = ("wind_speed_10m", "rain", "showers", "snowfall")
 # heatmap grid) uses large ones to stay well inside the request budget.
 DEFAULT_CHUNK_SIZE = 40
 FAST_CHUNK_SIZE = 12
-MAX_CONCURRENT_REQUESTS = 6
+HEATMAP_CHUNK_SIZE = 75
+# The free tier also caps requests in flight per IP ("Too many concurrent
+# requests"). One semaphore per process keeps every caller, including a plan
+# and a heatmap running side by side, under that cap.
+MAX_CONCURRENT_REQUESTS = 3
+_IN_FLIGHT = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
 # Transient failures (timeouts, 429/5xx, malformed answers) are retried with a
-# linear backoff: 1.5 s, then 3 s.
-TRANSIENT_RETRIES = 2
+# backoff (1.5 s per attempt) plus jitter so parallel chunks don't retry
+# in lockstep and trip the concurrency limit again.
+TRANSIENT_RETRIES = 1  # keeps the worst case well inside the 60 s function limit
 RETRY_BACKOFF_SECONDS = 1.5
+RETRY_JITTER_SECONDS = 0.75
 BUSY_MESSAGE = "The weather service is busy right now. Please try again in a minute."
 
 
@@ -61,6 +70,42 @@ class OpenMeteoClient:
         self._base_url = base_url or settings.OPEN_METEO_BASE_URL
         self._http = http or httpx.Client(timeout=timeout or settings.OPEN_METEO_TIMEOUT_SECONDS)
 
+    @overload
+    def hourly(
+        self,
+        points: Sequence[GeoPoint],
+        start: datetime,
+        end: datetime,
+        *,
+        chunk_size: int = ...,
+        fields: Sequence[str] = ...,
+        allow_partial: Literal[False] = ...,
+    ) -> list[HourlySeries]: ...
+
+    @overload
+    def hourly(
+        self,
+        points: Sequence[GeoPoint],
+        start: datetime,
+        end: datetime,
+        *,
+        chunk_size: int = ...,
+        fields: Sequence[str] = ...,
+        allow_partial: Literal[True],
+    ) -> list[HourlySeries | None]: ...
+
+    @overload
+    def hourly(
+        self,
+        points: Sequence[GeoPoint],
+        start: datetime,
+        end: datetime,
+        *,
+        chunk_size: int = ...,
+        fields: Sequence[str] = ...,
+        allow_partial: bool = ...,
+    ) -> list[HourlySeries | None]: ...
+
     def hourly(
         self,
         points: Sequence[GeoPoint],
@@ -69,11 +114,15 @@ class OpenMeteoClient:
         *,
         chunk_size: int = DEFAULT_CHUNK_SIZE,
         fields: Sequence[str] = HOURLY_FIELDS,
-    ) -> list[HourlySeries]:
+        allow_partial: bool = False,
+    ) -> list[HourlySeries] | list[HourlySeries | None]:
         """
         Hourly series for every point between ``start`` and ``end`` (inclusive hours, UTC).
 
-        Points are split into ``chunk_size`` groups fetched concurrently.
+        Points are split into ``chunk_size`` groups fetched concurrently. With
+        ``allow_partial``, a chunk that still fails after its retry yields
+        ``None`` for each of its points instead of failing the whole call, so
+        one slow answer from the provider degrades a plan rather than breaking it.
         """
         if not points:
             return []
@@ -81,15 +130,23 @@ class OpenMeteoClient:
         chunks = [
             points[offset : offset + chunk_size] for offset in range(0, len(points), chunk_size)
         ]
+
+        def fetch(chunk: Sequence[GeoPoint]) -> list[HourlySeries | None]:
+            try:
+                return list(self._fetch_chunk_with_retry(chunk, start, end, fields))
+            except TransientUpstreamError as exc:
+                if not allow_partial:
+                    raise
+                logger.warning(
+                    "Open-Meteo gave up on %d points (%s)", len(chunk), exc.details or exc.message
+                )
+                return [None] * len(chunk)
+
         if len(chunks) == 1:
-            return self._fetch_chunk_with_retry(chunks[0], start, end, fields)
+            return fetch(chunks[0])
         workers = min(MAX_CONCURRENT_REQUESTS, len(chunks))
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            results = list(
-                pool.map(
-                    lambda chunk: self._fetch_chunk_with_retry(chunk, start, end, fields), chunks
-                )
-            )
+            results = list(pool.map(fetch, chunks))
         return [series for chunk_series in results for series in chunk_series]
 
     def _fetch_chunk_with_retry(
@@ -113,7 +170,8 @@ class OpenMeteoClient:
                     attempt,
                     len(points),
                 )
-                time.sleep(RETRY_BACKOFF_SECONDS * attempt)
+                jitter = random.uniform(0, RETRY_JITTER_SECONDS) if RETRY_BACKOFF_SECONDS else 0.0
+                time.sleep(RETRY_BACKOFF_SECONDS * attempt + jitter)
 
     def _fetch_chunk(
         self,
@@ -134,7 +192,8 @@ class OpenMeteoClient:
             "end_hour": _format_hour(end),
         }
         try:
-            response = self._http.get(self._base_url, params=params)
+            with _IN_FLIGHT:
+                response = self._http.get(self._base_url, params=params)
         except httpx.TransportError as exc:  # timeouts, connection resets, DNS
             raise TransientUpstreamError(
                 BUSY_MESSAGE, details={"provider": "open-meteo", "cause": type(exc).__name__}

@@ -158,7 +158,7 @@ OPEN_METEO_TIMEOUT_SECONDS = float(os.getenv("OPEN_METEO_TIMEOUT_SECONDS", "15")
 # Cache lifetimes (seconds)
 GEOCODE_CACHE_TTL = 24 * 60 * 60
 ROUTE_CACHE_TTL = 60 * 60
-WEATHER_CACHE_TTL = 15 * 60
+WEATHER_CACHE_TTL = 60 * 60  # forecast models update about hourly
 
 # --- Planning limits --------------------------------------------------------
 

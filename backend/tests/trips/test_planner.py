@@ -141,3 +141,14 @@ def test_no_recommendation_when_forecasts_cover_too_little_of_every_route() -> N
     assert plan["routes"][0]["summary"]["unknown_miles"] == 50.0
     assert any("Forecasts don't cover enough" in w for w in plan["warnings"])
     assert not any("No-Travel" in w for w in plan["warnings"])
+
+
+def test_provider_failures_degrade_the_plan_with_an_honest_warning() -> None:
+    route = straight_route("r", total_miles=50, lat=0.0)
+    weather = FakeWeather(lambda p, w: None, unavailable=3)
+
+    plan = TripPlanner(geo=FakeGeo([route]), weather=weather).plan(_request())  # type: ignore[arg-type]
+
+    assert plan["recommended_route_id"] is None
+    assert any("weather service didn't answer for 3 checkpoint" in w for w in plan["warnings"])
+    assert any("Too little forecast data" in w for w in plan["warnings"])

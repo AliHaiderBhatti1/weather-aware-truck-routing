@@ -80,7 +80,10 @@ class TripPlanHeatmapView(APIView):
     @extend_schema(responses={200: OpenApiResponse(description="Hourly risk grid")})
     def get(self, request: Request, plan_id: str) -> Response:
         plan = get_object_or_404(TripPlan, pk=plan_id)
-        if plan.heatmap is None:
-            plan.heatmap = build_heatmap(plan.result)
+        if plan.heatmap is not None:
+            return Response(plan.heatmap)
+        heatmap = build_heatmap(plan.result)
+        if heatmap.get("complete", True):
+            plan.heatmap = heatmap
             plan.save(update_fields=["heatmap"])
-        return Response(plan.heatmap)
+        return Response(heatmap)

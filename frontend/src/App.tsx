@@ -158,6 +158,7 @@ export default function App() {
               onToggleVisible={() => setHeatmapVisible((v) => !v)}
               loading={heatmapQuery.isPending}
               error={heatmapQuery.isError}
+              partial={heatmapQuery.data?.complete === false}
             />
           </div>
         )}

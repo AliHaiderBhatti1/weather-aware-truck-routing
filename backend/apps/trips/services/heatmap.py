@@ -16,7 +16,7 @@ from django.conf import settings
 from apps.geo.types import GeoPoint
 from apps.geo.units import miles_to_meters
 from apps.risk.engine import assess
-from apps.weather.client import RISK_ONLY_FIELDS
+from apps.weather.client import HEATMAP_CHUNK_SIZE, RISK_ONLY_FIELDS
 from apps.weather.service import WeatherService
 from apps.weather.types import HOUR
 
@@ -45,7 +45,14 @@ def build_heatmap(
 
     grid = corridor_grid(routes_coords, plan["bounds"], max_points=max_points)
     # +1 h so the final hour's precipitation (stamped at its end) is included.
-    series = weather.hourly(grid, start, end + HOUR, fields=RISK_ONLY_FIELDS)
+    series = weather.hourly(
+        grid,
+        start,
+        end + HOUR,
+        fields=RISK_ONLY_FIELDS,
+        chunk_size=HEATMAP_CHUNK_SIZE,
+        allow_partial=True,
+    )
 
     times = [start + timedelta(hours=i) for i in range(hours + 1)]
     points: list[dict[str, Any]] = []
@@ -53,7 +60,7 @@ def build_heatmap(
         levels: list[int | None] = []
         winds: list[float | None] = []
         for moment in times:
-            sample = hourly.sample_at(moment)
+            sample = hourly.sample_at(moment) if hourly is not None else None
             if sample is None:
                 # Unknown, drawn as transparent rather than as Low.
                 levels.append(None)
@@ -64,6 +71,9 @@ def build_heatmap(
         points.append({"lat": point.lat, "lon": point.lon, "levels": levels, "wind_mph": winds})
 
     return {
+        # False when the provider failed for part of the grid; such a heatmap is
+        # served but not stored, so the next request fills the gaps.
+        "complete": all(hourly is not None for hourly in series),
         "start": start.isoformat(),
         "hours": [moment.isoformat() for moment in times],
         "points": points,

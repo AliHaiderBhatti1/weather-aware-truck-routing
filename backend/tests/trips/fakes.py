@@ -7,21 +7,29 @@ from datetime import datetime, timedelta
 
 from apps.geo.types import GeoPoint, Place, Route
 from apps.risk.engine import WeatherSample
+from apps.weather.service import ForecastBatch
 from apps.weather.types import HourlySeries
 
 
 class FakeWeather:
     """Weather chosen by a callback on (point, time) so tests can shape risk per route."""
 
-    def __init__(self, rule: Callable[[GeoPoint, datetime], WeatherSample | None]) -> None:
+    def __init__(
+        self,
+        rule: Callable[[GeoPoint, datetime], WeatherSample | None],
+        *,
+        unavailable: int = 0,
+        failed_series: bool = False,
+    ) -> None:
         self.rule = rule
         self.sample_calls = 0
+        self.unavailable = unavailable
+        self.failed_series = failed_series
 
-    def samples_at(
-        self, requests: Sequence[tuple[GeoPoint, datetime]]
-    ) -> list[WeatherSample | None]:
+    def samples_at(self, requests: Sequence[tuple[GeoPoint, datetime]]) -> ForecastBatch:
         self.sample_calls += 1
-        return [self.rule(point, when) for point, when in requests]
+        samples = [self.rule(point, when) for point, when in requests]
+        return ForecastBatch(samples=samples, unavailable=self.unavailable)
 
     def hourly(
         self,
@@ -31,9 +39,12 @@ class FakeWeather:
         *,
         chunk_size: int = 40,
         fields: Sequence[str] | None = None,
-    ) -> list[HourlySeries]:
+        allow_partial: bool = False,
+    ) -> list[HourlySeries | None]:
+        if self.failed_series:
+            return [None for _ in points]
         hours = int((end - start).total_seconds() // 3600) + 1
-        series = []
+        series: list[HourlySeries | None] = []
         for point in points:
             samples = [self.rule(point, start + timedelta(hours=i)) for i in range(hours)]
             series.append(

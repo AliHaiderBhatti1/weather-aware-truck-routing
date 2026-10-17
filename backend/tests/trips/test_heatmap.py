@@ -43,6 +43,7 @@ def test_build_heatmap_emits_levels_per_hour_for_each_point() -> None:
 
     heatmap = build_heatmap(plan, weather=FakeWeather(windy_afternoon), max_points=30)  # type: ignore[arg-type]
 
+    assert heatmap["complete"] is True
     assert heatmap["start"] == "2026-10-20T08:00:00+00:00"
     assert len(heatmap["hours"]) == 49
     assert 0 < len(heatmap["points"]) <= 30
@@ -73,3 +74,21 @@ def test_hours_without_a_forecast_are_unknown_not_low() -> None:
     levels = heatmap["points"][0]["levels"]
     assert levels[0] == 0  # 08:00, known and calm
     assert levels[5] is None  # 13:00, no forecast
+
+
+def test_heatmap_is_marked_incomplete_when_the_provider_fails() -> None:
+    route = straight_route("r", total_miles=60, lat=0.0)
+    plan = TripPlanner(geo=FakeGeo([route]), weather=FakeWeather(calm)).plan(  # type: ignore[arg-type]
+        PlanRequest(
+            Place("A", "A", GeoPoint(0, 0)),
+            Place("B", "B", GeoPoint(0, 1)),
+            datetime(2026, 10, 20, 8, 30, tzinfo=UTC),
+            20_000,
+            25,
+        )
+    )
+
+    heatmap = build_heatmap(plan, weather=FakeWeather(calm, failed_series=True), max_points=10)  # type: ignore[arg-type]
+
+    assert heatmap["complete"] is False
+    assert all(level is None for level in heatmap["points"][0]["levels"])

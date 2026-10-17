@@ -137,3 +137,18 @@ def test_heatmap_is_computed_once_and_cached_on_the_plan(api_client: APIClient) 
     assert first.status_code == second.status_code == 200
     assert build.call_count == 1
     assert TripPlan.objects.get(pk=plan_id).heatmap == {"points": [], "hours": []}
+
+
+@pytest.mark.django_db
+@freeze_time(NOW)
+def test_incomplete_heatmaps_are_served_but_not_stored(api_client: APIClient) -> None:
+    with patch("apps.trips.views.TripPlanner", return_value=_fake_planner()):
+        plan_id = api_client.post("/api/trips/", _body(), format="json").json()["id"]
+
+    partial = {"complete": False, "points": [], "hours": []}
+    with patch("apps.trips.views.build_heatmap", return_value=partial) as build:
+        api_client.get(f"/api/trips/{plan_id}/heatmap/")
+        api_client.get(f"/api/trips/{plan_id}/heatmap/")
+
+    assert build.call_count == 2  # recomputed until complete
+    assert TripPlan.objects.get(pk=plan_id).heatmap is None

@@ -30,7 +30,7 @@ class FakeClient:
         self.calls: list[tuple[int, datetime, datetime]] = []
         self.chunk_sizes: list[int] = []
 
-    def hourly(self, points, start, end, *, chunk_size=40, fields=None):  # type: ignore[no-untyped-def]
+    def hourly(self, points, start, end, *, chunk_size=40, fields=None, allow_partial=False):  # type: ignore[no-untyped-def]
         self.calls.append((len(points), start, end))
         self.chunk_sizes.append(chunk_size)
         return [_series(p) for p in points]
@@ -92,7 +92,7 @@ def test_samples_at_fetches_one_window_for_all_points() -> None:
         (GeoPoint(2, 2), T0 + timedelta(hours=2, minutes=30)),
     ]
 
-    samples = service.samples_at(requests)
+    samples = service.samples_at(requests).samples
 
     # Window runs one hour past the last ETA so its "hour ending" stamp exists.
     assert client.calls == [(2, T0, T0 + timedelta(hours=3))]

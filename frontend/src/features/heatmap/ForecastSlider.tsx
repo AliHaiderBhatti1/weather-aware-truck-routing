@@ -15,6 +15,8 @@ interface ForecastSliderProps {
   onToggleVisible: () => void
   loading?: boolean
   error?: boolean
+  /** Part of the corridor has no forecast (weather service failed for some cells). */
+  partial?: boolean
 }
 
 const PLAY_INTERVAL_MS = 450
@@ -28,6 +30,7 @@ export function ForecastSlider({
   onToggleVisible,
   loading,
   error,
+  partial,
 }: ForecastSliderProps) {
   const [playing, setPlaying] = useState(false)
   const maxHour = plan.forecast_window.hours
@@ -86,10 +89,12 @@ export function ForecastSlider({
           </p>
           <p className="text-[11px] text-slate-500">
             {error
-              ? 'Corridor forecast unavailable.'
+              ? 'Corridor forecast unavailable. The weather service is busy; try again shortly.'
               : loading
                 ? 'Loading 48 h corridor forecast…'
-                : 'Weather risk across the corridor, 0–48 h from departure'}
+                : partial
+                  ? 'Part of the corridor has no forecast yet (shown blank); reload later to fill it in.'
+                  : 'Weather risk across the corridor, 0–48 h from departure'}
           </p>
         </div>
         <Button
