@@ -10,6 +10,7 @@ import { HeatmapLayer } from '@/features/heatmap/HeatmapLayer'
 import { useHeatmap } from '@/features/heatmap/useHeatmap'
 import { MapLegend } from '@/features/map/MapLegend'
 import { MapView } from '@/features/map/MapView'
+import { PlanSkeleton } from '@/features/routes/PlanSkeleton'
 import { RouteList } from '@/features/routes/RouteList'
 import { TripForm } from '@/features/trip-form/TripForm'
 import { TripSummary } from '@/features/trip-form/TripSummary'
@@ -85,7 +86,8 @@ export default function App() {
     if (planQuery.isError) writePlanIdToUrl(null)
   }, [planQuery.isError])
 
-  const showForm = editing || !plan
+  const loadingSharedPlan = Boolean(planId) && planQuery.isLoading
+  const showForm = editing || (!plan && !loadingSharedPlan)
 
   return (
     <div className="flex h-dvh flex-col lg:flex-row">
@@ -97,7 +99,8 @@ export default function App() {
       >
         <AppHeader />
         <ApiStatusBanner />
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-slate-50/60 p-4 pb-20 lg:pb-4">
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-slate-50/60 p-4">
+          {loadingSharedPlan && <PlanSkeleton />}
           {showForm ? (
             <Card className="p-4">
               <TripForm
@@ -106,10 +109,11 @@ export default function App() {
                 error={planMutation.error}
                 defaultValues={editing ? editDefaults : undefined}
                 onCancel={editing && plan ? () => setEditing(false) : undefined}
+                pendingLabel={progress}
               />
             </Card>
           ) : (
-            <TripSummary plan={plan} onEdit={startEditing} onReset={resetTrip} />
+            plan && <TripSummary plan={plan} onEdit={startEditing} onReset={resetTrip} />
           )}
 
           {planQuery.isError && (
@@ -156,7 +160,7 @@ export default function App() {
           <MapLegend />
         </div>
         {plan && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-[72px] z-10 flex justify-center px-3 lg:bottom-8">
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center px-3 lg:bottom-8">
             <ForecastSlider
               plan={plan}
               selectedRoute={selectedRoute}

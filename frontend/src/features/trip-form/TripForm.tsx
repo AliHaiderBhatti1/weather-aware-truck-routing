@@ -19,6 +19,8 @@ interface TripFormProps {
   defaultValues?: Partial<TripFormValues>
   /** Shown when editing an existing plan; returns to the summary without changes. */
   onCancel?: () => void
+  /** Stage-by-stage progress text while planning (visible on phones too). */
+  pendingLabel?: string | null
 }
 
 const EXAMPLE_TRIP: Pick<TripFormValues, 'origin' | 'destination' | 'loadWeightLb'> = {
@@ -43,7 +45,14 @@ function defaultDeparture(): string {
   return toDateTimeLocal(date)
 }
 
-export function TripForm({ onSubmit, pending, error, defaultValues, onCancel }: TripFormProps) {
+export function TripForm({
+  onSubmit,
+  pending,
+  error,
+  defaultValues,
+  onCancel,
+  pendingLabel,
+}: TripFormProps) {
   const form = useForm<TripFormValues>({
     resolver: zodResolver(tripFormSchema),
     defaultValues: {
@@ -216,7 +225,11 @@ export function TripForm({ onSubmit, pending, error, defaultValues, onCancel }: 
           leftIcon={<Route className="h-4 w-4" />}
           className="flex-1"
         >
-          {pending ? 'Planning routes…' : onCancel ? 'Re-plan routes' : 'Plan routes'}
+          {pending
+            ? (pendingLabel ?? 'Planning routes…')
+            : onCancel
+              ? 'Re-plan routes'
+              : 'Plan routes'}
         </Button>
       </div>
       <button
