@@ -6,7 +6,7 @@ from django.core.cache import cache
 from apps.geo.service import GeoService, overlap
 from apps.geo.types import GeoPoint, Place, Route
 from apps.trips.exceptions import GeocodingError, RoutingError
-from tests.geo.helpers import straight_route
+from tests.geo.helpers import MILES_PER_DEGREE_LON_AT_EQUATOR, straight_route
 
 
 class FakeGeocoder:
@@ -45,6 +45,22 @@ DEST = GeoPoint(0.0, 1.5)
 @pytest.fixture(autouse=True)
 def _clear_cache() -> None:
     cache.clear()
+
+
+@pytest.mark.parametrize("offset_miles", [0.7, 1.5, 2.5, 4.9])
+def test_overlap_ignores_where_sample_points_happen_to_fall(offset_miles: float) -> None:
+    # Same road, but the second route starts a little further along, so its
+    # 5-mile samples sit between the first route's samples.
+    a = straight_route("a", total_miles=100, segments=10, lat=0.0)
+    shifted = straight_route(
+        "b",
+        total_miles=100,
+        segments=10,
+        lat=0.0,
+        lon_start=offset_miles / MILES_PER_DEGREE_LON_AT_EQUATOR,
+    )
+    assert overlap(a, shifted) >= 0.9
+    assert overlap(shifted, a) >= 0.9
 
 
 def test_overlap_detects_identical_and_distinct_routes() -> None:

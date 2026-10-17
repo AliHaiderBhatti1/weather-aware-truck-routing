@@ -34,6 +34,12 @@ TARGET_ROUTE_COUNT = 3
 FALLBACK_EXCLUSIONS = ("toll", "motorway")
 OVERLAP_SAMPLE_MILES = 5.0
 OVERLAP_TOLERANCE_M = miles_to_meters(1.0)
+# The other route is sampled much more densely than the tolerance so a point on
+# the same road is always close to one of its samples, whatever the phase.
+OVERLAP_REFERENCE_STEP_MILES = 0.25
+# Spatial bucket edge, chosen so 3x3 neighbouring cells always span more than
+# the tolerance, even at high latitudes where longitude degrees shrink.
+OVERLAP_BUCKET_DEG = 0.05
 DUPLICATE_OVERLAP = 0.85
 
 SOURCE_LABELS = {
@@ -171,12 +177,12 @@ def _merge_distinct(existing: list[Route], candidates: Iterable[Route]) -> list[
 
 
 def overlap(a: Route, b: Route) -> float:
-    """Fraction of ``a``'s sampled points that lie within a mile of ``b``."""
+    """Fraction of ``a``'s sample points that lie within the tolerance of ``b``'s road."""
     pts_a = densify(a, OVERLAP_SAMPLE_MILES)
-    pts_b = densify(b, OVERLAP_SAMPLE_MILES)
+    pts_b = densify(b, OVERLAP_REFERENCE_STEP_MILES)
     if not pts_a or not pts_b:
         return 0.0
-    # Coarse spatial bucketing keeps this O(n) for long routes.
+    # Spatial bucketing keeps this roughly linear for long routes.
     buckets: dict[tuple[int, int], list[GeoPoint]] = {}
     for p in pts_b:
         buckets.setdefault(_bucket(p), []).append(p)
@@ -191,5 +197,5 @@ def overlap(a: Route, b: Route) -> float:
     return near / len(pts_a)
 
 
-def _bucket(p: GeoPoint, size_deg: float = 0.02) -> tuple[int, int]:
+def _bucket(p: GeoPoint, size_deg: float = OVERLAP_BUCKET_DEG) -> tuple[int, int]:
     return int(p.lat // size_deg), int(p.lon // size_deg)
