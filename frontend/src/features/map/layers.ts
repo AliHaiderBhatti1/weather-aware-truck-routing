@@ -86,3 +86,6 @@ export function activeHourLayer(hourIndex: number | null): LayerProps {
     },
   }
 }
+
+/** The lowest route layer; anything drawn under the routes is inserted before it. */
+export const UNDERLAY_BEFORE_LAYER_ID = ROUTES_OTHER_CASING.id!

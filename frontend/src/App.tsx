@@ -133,9 +133,14 @@ export default function App() {
           onSelectRoute={setSelectedRouteId}
           onCheckpointClick={setHour}
           activeHourIndex={plan ? hour : null}
-          underlay={
+          renderUnderlay={(beforeId) =>
             heatmapQuery.data ? (
-              <HeatmapLayer heatmap={heatmapQuery.data} hourIndex={hour} visible={heatmapVisible} />
+              <HeatmapLayer
+                heatmap={heatmapQuery.data}
+                hourIndex={hour}
+                visible={heatmapVisible}
+                beforeId={beforeId}
+              />
             ) : null
           }
         />

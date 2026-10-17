@@ -25,6 +25,7 @@ import {
   ROUTES_OTHER_CASING,
   SEGMENTS,
   SEGMENTS_CASING,
+  UNDERLAY_BEFORE_LAYER_ID,
 } from './layers'
 import { buildMapData } from './mapData'
 import { RouteLabels } from './RouteLabels'
@@ -42,9 +43,11 @@ interface MapViewProps {
   onSelectRoute: (routeId: string) => void
   onCheckpointClick?: (hourIndex: number) => void
   activeHourIndex: number | null
-  /** Layers rendered beneath the routes (e.g. the corridor heatmap). */
-  underlay?: React.ReactNode
-  children?: React.ReactNode
+  /**
+   * Layers to draw beneath every route layer (e.g. the corridor heatmap).
+   * Receives the id of the lowest route layer to pass as \`beforeId\`.
+   */
+  renderUnderlay?: (beforeId: string) => React.ReactNode
 }
 
 interface Hover {
@@ -58,8 +61,7 @@ export function MapView({
   onSelectRoute,
   onCheckpointClick,
   activeHourIndex,
-  underlay,
-  children,
+  renderUnderlay,
 }: MapViewProps) {
   const mapRef = useRef<MapRef>(null)
   const [hover, setHover] = useState<Hover | null>(null)
@@ -147,7 +149,6 @@ export function MapView({
 
       {data && (
         <>
-          {underlay}
           <Source id="routes" type="geojson" data={data.routes}>
             <Layer {...ROUTES_OTHER_CASING} />
             <Layer {...ROUTES_OTHER} />
@@ -162,6 +163,9 @@ export function MapView({
             <Layer {...CHECKPOINTS} />
             <Layer {...activeHourLayer(activeHourIndex)} />
           </Source>
+          {/* Rendered after the route sources so their layers exist when the
+              underlay is inserted beneath the lowest of them. */}
+          {renderUnderlay?.(UNDERLAY_BEFORE_LAYER_ID)}
         </>
       )}
 
@@ -176,8 +180,6 @@ export function MapView({
       {destination && <EndpointMarker lon={destination.lon} lat={destination.lat} label="B" />}
 
       {hover && <CheckpointPopup route={hover.route} checkpoint={hover.checkpoint} />}
-
-      {children}
     </Map>
   )
 }
