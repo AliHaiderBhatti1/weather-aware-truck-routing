@@ -21,7 +21,7 @@ from apps.geo.service import GeoService
 from apps.geo.types import GeoPoint
 from apps.risk.engine import assess
 from apps.risk.levels import RiskLevel
-from apps.weather.client import RISK_ONLY_FIELDS
+from apps.weather.client import RISK_ONLY_FIELDS, OpenMeteoClient
 from apps.weather.service import WeatherService
 
 DEFAULT_CORRIDORS = [
@@ -42,6 +42,8 @@ DEFAULT_CORRIDORS = [
 ]
 SAMPLES_PER_CORRIDOR = 5
 HORIZON_DAYS = 14
+SCAN_TIMEOUT_SECONDS = 60.0
+SCAN_CHUNK_SIZE = 20
 
 
 class Command(BaseCommand):
@@ -59,7 +61,8 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         load_lb: int = options["load"]
         corridors: list[str] = options["corridors"] or DEFAULT_CORRIDORS
-        geo, weather = GeoService(), WeatherService()
+        # A scan is offline tooling, so it can wait out slow provider spells.
+        geo, weather = GeoService(), WeatherService(OpenMeteoClient(timeout=SCAN_TIMEOUT_SECONDS))
         now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
         end = now + timedelta(days=HORIZON_DAYS)
 
@@ -81,10 +84,24 @@ class Command(BaseCommand):
                 points.append(GeoPoint(lat, lon))
                 owners.append((labels[-1], i))
 
-        series = weather.hourly(points, now, end, fields=RISK_ONLY_FIELDS)
+        series = weather.hourly(
+            points,
+            now,
+            end,
+            fields=RISK_ONLY_FIELDS,
+            chunk_size=SCAN_CHUNK_SIZE,
+            allow_partial=True,
+        )
+        missing = sum(1 for hourly in series if hourly is None)
+        if missing:
+            self.stderr.write(
+                f"Weather service skipped {missing} of {len(points)} points; results are partial."
+            )
 
         best: dict[tuple[str, RiskLevel], tuple[datetime, str]] = {}
         for (label, index), hourly in zip(owners, series, strict=True):
+            if hourly is None:
+                continue
             for moment in hourly.times:
                 sample = hourly.sample_at(moment)
                 if sample is None:
