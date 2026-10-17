@@ -12,7 +12,7 @@ from apps.weather.types import HourlySeries
 T0 = datetime(2026, 10, 20, 8, tzinfo=UTC)
 
 
-def _series(point: GeoPoint, hours: int = 3, wind: float = 10.0) -> HourlySeries:
+def _series(point: GeoPoint, hours: int = 4, wind: float = 10.0) -> HourlySeries:
     return HourlySeries(
         point=point,
         times=[T0 + timedelta(hours=i) for i in range(hours)],
@@ -41,18 +41,47 @@ def _clear_cache() -> None:
     cache.clear()
 
 
-def test_sample_at_uses_the_hour_bucket_containing_the_time() -> None:
-    series = _series(GeoPoint(0, 0))
+def _stamped_series() -> HourlySeries:
+    """Stamps 08:00..11:00; rain values identify the hour they close."""
+    return HourlySeries(
+        point=GeoPoint(0, 0),
+        times=[T0 + timedelta(hours=i) for i in range(4)],
+        wind_mph=[10.0, 20.0, 30.0, 40.0],
+        wind_gust_mph=[0.0, 1.0, 2.0, 3.0],
+        rain_in=[0.0, 0.1, 0.2, 0.3],  # 0.1 = total for 08:00-09:00, etc.
+        snow_in=[0.0, 0.0, 0.0, 0.0],
+        temperature_f=[50.0, 51.0, 52.0, 53.0],
+        weather_code=[0, 61, 63, 65],
+    )
 
-    assert series.sample_at(T0 + timedelta(minutes=59)).wind_mph == 10.0  # type: ignore[union-attr]
-    assert series.sample_at(T0 + timedelta(hours=1)).wind_mph == 11.0  # type: ignore[union-attr]
-    assert series.sample_at(T0 + timedelta(hours=2, minutes=59)).wind_mph == 12.0  # type: ignore[union-attr]
+
+def test_precipitation_comes_from_the_value_stamped_at_the_end_of_the_hour() -> None:
+    series = _stamped_series()
+
+    at_0815 = series.sample_at(T0 + timedelta(minutes=15))
+    at_0959 = series.sample_at(T0 + timedelta(hours=1, minutes=59))
+
+    assert at_0815 is not None and at_0959 is not None
+    assert at_0815.rain_in_per_hr == 0.1  # 08:00-09:00 total, stamped 09:00
+    assert at_0815.wind_gust_mph == 1.0
+    assert at_0815.weather_code == 61
+    assert at_0959.rain_in_per_hr == 0.2  # 09:00-10:00 total, stamped 10:00
+
+
+def test_instantaneous_values_come_from_the_nearest_reading() -> None:
+    series = _stamped_series()
+
+    assert series.sample_at(T0 + timedelta(minutes=29)).wind_mph == 10.0  # type: ignore[union-attr]
+    assert series.sample_at(T0 + timedelta(minutes=30)).wind_mph == 20.0  # type: ignore[union-attr]
+    assert series.sample_at(T0 + timedelta(minutes=30)).temperature_f == 51.0  # type: ignore[union-attr]
 
 
 def test_sample_at_outside_range_is_none() -> None:
-    series = _series(GeoPoint(0, 0))
-    assert series.sample_at(T0 - timedelta(minutes=1)) is None
-    assert series.sample_at(T0 + timedelta(hours=3)) is None
+    series = _stamped_series()
+    # 07:29's nearest wind reading would be 07:00, before the series starts.
+    assert series.sample_at(T0 - timedelta(minutes=31)) is None
+    # 11:10 would need the 12:00 stamp, which the series doesn't have.
+    assert series.sample_at(T0 + timedelta(hours=3, minutes=10)) is None
 
 
 def test_samples_at_fetches_one_window_for_all_points() -> None:
@@ -65,9 +94,10 @@ def test_samples_at_fetches_one_window_for_all_points() -> None:
 
     samples = service.samples_at(requests)
 
-    assert client.calls == [(2, T0, T0 + timedelta(hours=2))]
+    # Window runs one hour past the last ETA so its "hour ending" stamp exists.
+    assert client.calls == [(2, T0, T0 + timedelta(hours=3))]
     assert client.chunk_sizes == [12]  # latency-critical path uses small chunks
-    assert [s.wind_mph for s in samples if s] == [10.0, 12.0]
+    assert [s.wind_mph for s in samples if s] == [10.0, 13.0]
 
 
 def test_hourly_results_are_cached_per_point_and_window() -> None:

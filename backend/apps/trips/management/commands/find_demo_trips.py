@@ -85,8 +85,10 @@ class Command(BaseCommand):
 
         best: dict[tuple[str, RiskLevel], tuple[datetime, str]] = {}
         for (label, index), hourly in zip(owners, series, strict=True):
-            for position, moment in enumerate(hourly.times):
-                sample = hourly.sample(position)
+            for moment in hourly.times:
+                sample = hourly.sample_at(moment)
+                if sample is None:
+                    continue
                 result = assess(sample, load_lb)
                 key = (label, result.level)
                 detail = (

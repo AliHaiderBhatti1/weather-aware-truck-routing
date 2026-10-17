@@ -2,20 +2,31 @@
 
 from __future__ import annotations
 
-from bisect import bisect_right
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from apps.geo.types import GeoPoint
 from apps.risk.engine import WeatherSample
 
+HOUR = timedelta(hours=1)
+HALF_HOUR = timedelta(minutes=30)
+
+
+def floor_hour(moment: datetime) -> datetime:
+    return moment.replace(minute=0, second=0, microsecond=0)
+
 
 @dataclass(frozen=True, slots=True)
 class HourlySeries:
     """
-    Hourly forecast for ``point``. ``times`` are UTC bucket starts; every other
-    list is aligned with it. Precipitation values are the hour's accumulated
-    totals, which equals the in/hr rate the risk rules expect.
+    Hourly forecast for ``point`` with every list aligned to ``times`` (UTC).
+
+    Open-Meteo stamps two kinds of values differently:
+
+    * accumulations and maxima (``rain``, ``showers``, ``snowfall``, gusts,
+      weather code) cover the *preceding* hour, so the value stamped 03:00 is
+      the total for 02:00-03:00, which is the in/hr rate the risk rules expect;
+    * instantaneous values (wind speed, temperature) are readings at the stamp.
     """
 
     point: GeoPoint
@@ -27,29 +38,34 @@ class HourlySeries:
     temperature_f: list[float]
     weather_code: list[int]
 
-    def index_at(self, when: datetime) -> int | None:
-        """Index of the hour bucket that contains ``when``, or ``None`` if out of range."""
+    def _index_of(self, stamp: datetime) -> int | None:
         if not self.times:
             return None
-        position = bisect_right(self.times, when) - 1
-        if position < 0:
+        offset = stamp - self.times[0]
+        index, remainder = divmod(offset, HOUR)
+        if remainder or not 0 <= index < len(self.times):
             return None
-        if when - self.times[position] >= timedelta(hours=1):
-            return None
-        return position
+        return int(index)
 
     def sample_at(self, when: datetime) -> WeatherSample | None:
-        index = self.index_at(when)
-        if index is None:
-            return None
-        return self.sample(index)
+        """
+        Weather for a truck passing at ``when``.
 
-    def sample(self, index: int) -> WeatherSample:
+        Precipitation and gusts come from the hour that contains ``when`` (the
+        value stamped at the end of that hour); wind and temperature from the
+        nearest reading. Returns ``None`` when either is outside the series.
+        """
+        hour_start = floor_hour(when)
+        hour_index = self._index_of(hour_start + HOUR)
+        nearest = hour_start if when - hour_start < HALF_HOUR else hour_start + HOUR
+        reading_index = self._index_of(nearest)
+        if hour_index is None or reading_index is None:
+            return None
         return WeatherSample(
-            wind_mph=self.wind_mph[index],
-            rain_in_per_hr=self.rain_in[index],
-            snow_in_per_hr=self.snow_in[index],
-            wind_gust_mph=self.wind_gust_mph[index],
-            temperature_f=self.temperature_f[index],
-            weather_code=self.weather_code[index],
+            wind_mph=self.wind_mph[reading_index],
+            rain_in_per_hr=self.rain_in[hour_index],
+            snow_in_per_hr=self.snow_in[hour_index],
+            wind_gust_mph=self.wind_gust_mph[hour_index],
+            temperature_f=self.temperature_f[reading_index],
+            weather_code=self.weather_code[hour_index],
         )

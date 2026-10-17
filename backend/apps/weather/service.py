@@ -17,7 +17,7 @@ from apps.weather.client import (
     HOURLY_FIELDS,
     OpenMeteoClient,
 )
-from apps.weather.types import HourlySeries
+from apps.weather.types import HOUR, HourlySeries
 
 
 class WeatherService:
@@ -69,8 +69,12 @@ class WeatherService:
         if not requests:
             return []
         times = [when for _, when in requests]
+        # +1 h: precipitation for the hour containing an ETA is stamped at its end.
         series = self.hourly(
-            [point for point, _ in requests], min(times), max(times), chunk_size=FAST_CHUNK_SIZE
+            [point for point, _ in requests],
+            min(times),
+            max(times) + HOUR,
+            chunk_size=FAST_CHUNK_SIZE,
         )
         return [s.sample_at(when) for s, (_, when) in zip(series, requests, strict=True)]
 

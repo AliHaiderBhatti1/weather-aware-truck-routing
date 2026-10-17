@@ -18,6 +18,7 @@ from apps.geo.units import miles_to_meters
 from apps.risk.engine import assess
 from apps.weather.client import RISK_ONLY_FIELDS
 from apps.weather.service import WeatherService
+from apps.weather.types import HOUR
 
 MIN_SPACING_DEG = 0.08
 TARGET_COLUMNS = 26
@@ -43,7 +44,8 @@ def build_heatmap(
     end = start + timedelta(hours=hours)
 
     grid = corridor_grid(routes_coords, plan["bounds"], max_points=max_points)
-    series = weather.hourly(grid, start, end, fields=RISK_ONLY_FIELDS)
+    # +1 h so the final hour's precipitation (stamped at its end) is included.
+    series = weather.hourly(grid, start, end + HOUR, fields=RISK_ONLY_FIELDS)
 
     times = [start + timedelta(hours=i) for i in range(hours + 1)]
     points: list[dict[str, Any]] = []
@@ -51,12 +53,11 @@ def build_heatmap(
         levels: list[int] = []
         winds: list[float] = []
         for moment in times:
-            index = hourly.index_at(moment)
-            if index is None:
+            sample = hourly.sample_at(moment)
+            if sample is None:
                 levels.append(0)
                 winds.append(0.0)
                 continue
-            sample = hourly.sample(index)
             levels.append(int(assess(sample, load_lb).level))
             winds.append(round(sample.wind_mph, 1))
         points.append({"lat": point.lat, "lon": point.lon, "levels": levels, "wind_mph": winds})
