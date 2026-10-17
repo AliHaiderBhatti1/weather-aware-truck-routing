@@ -87,6 +87,7 @@ def test_missing_weather_is_reported_and_excluded_from_totals() -> None:
     assert first["weather"] is None and first["risk"] is None
     # Checkpoints at 25 and 50 miles cover 25 + 12.5 miles; the origin's 12.5 is unknown.
     assert plan["routes"][0]["summary"]["miles_by_level"]["low"] == 37.5
+    assert plan["routes"][0]["summary"]["unknown_miles"] == 12.5
     assert any("unavailable for 1 checkpoint" in w for w in plan["warnings"])
 
 
@@ -128,3 +129,15 @@ def test_no_travel_at_the_destination_blocks_the_recommendation() -> None:
     assert summary["no_travel_miles"] == 12.5  # the arrival half-stretch
     assert summary["travel_advised"] is False
     assert plan["recommended_route_id"] is None
+
+
+def test_no_recommendation_when_forecasts_cover_too_little_of_every_route() -> None:
+    route = straight_route("r", total_miles=50, lat=0.0)
+    plan = TripPlanner(geo=FakeGeo([route]), weather=FakeWeather(lambda p, w: None)).plan(  # type: ignore[arg-type]
+        _request()
+    )
+
+    assert plan["recommended_route_id"] is None
+    assert plan["routes"][0]["summary"]["unknown_miles"] == 50.0
+    assert any("Forecasts don't cover enough" in w for w in plan["warnings"])
+    assert not any("No-Travel" in w for w in plan["warnings"])

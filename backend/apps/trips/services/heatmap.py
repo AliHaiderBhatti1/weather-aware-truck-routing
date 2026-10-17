@@ -50,13 +50,14 @@ def build_heatmap(
     times = [start + timedelta(hours=i) for i in range(hours + 1)]
     points: list[dict[str, Any]] = []
     for point, hourly in zip(grid, series, strict=True):
-        levels: list[int] = []
-        winds: list[float] = []
+        levels: list[int | None] = []
+        winds: list[float | None] = []
         for moment in times:
             sample = hourly.sample_at(moment)
             if sample is None:
-                levels.append(0)
-                winds.append(0.0)
+                # Unknown, drawn as transparent rather than as Low.
+                levels.append(None)
+                winds.append(None)
                 continue
             levels.append(int(assess(sample, load_lb).level))
             winds.append(round(sample.wind_mph, 1))

@@ -40,10 +40,10 @@ class FakeWeather:
                 HourlySeries(
                     point=point,
                     times=[start + timedelta(hours=i) for i in range(hours)],
-                    wind_mph=[s.wind_mph if s else 0.0 for s in samples],
+                    wind_mph=[s.wind_mph if s else None for s in samples],
                     wind_gust_mph=[0.0] * hours,
-                    rain_in=[s.rain_in_per_hr if s else 0.0 for s in samples],
-                    snow_in=[s.snow_in_per_hr if s else 0.0 for s in samples],
+                    rain_in=[s.rain_in_per_hr if s else None for s in samples],
+                    snow_in=[s.snow_in_per_hr if s else None for s in samples],
                     temperature_f=[50.0] * hours,
                     weather_code=[0] * hours,
                 )

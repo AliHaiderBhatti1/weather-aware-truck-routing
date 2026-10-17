@@ -159,3 +159,23 @@ def test_requested_fields_are_configurable() -> None:
     route = respx.get(URL).mock(return_value=httpx.Response(200, json=body))
     _client().hourly(POINTS, START, END, fields=("wind_speed_10m", "rain", "showers", "snowfall"))
     assert route.calls.last.request.url.params["hourly"] == "wind_speed_10m,rain,showers,snowfall"
+
+
+@respx.mock
+def test_missing_values_stay_unknown_instead_of_becoming_zero() -> None:
+    body = json.loads((FIXTURES / "open_meteo_multi.json").read_text())[0]
+    body["hourly"]["wind_speed_10m"] = [None, 30.0, 58.0]
+    body["hourly"]["rain"] = [None, 0.2, None]
+    body["hourly"]["showers"] = [None, 0.1, 0.0]
+    respx.get(URL).mock(return_value=httpx.Response(200, json=body))
+
+    series = _client().hourly([POINTS[0]], START, END)[0]
+
+    assert series.wind_mph[0] is None
+    assert series.rain_in == [
+        None,
+        pytest.approx(0.3),
+        0.0,
+    ]  # rain + showers; one present is enough
+    # 08:10 needs the 08:00 wind reading, which is missing, so the sample is unknown.
+    assert series.sample_at(START.replace(minute=10)) is None

@@ -3,8 +3,8 @@ import type { FeatureCollection, Point } from 'geojson'
 import type { Heatmap } from '@/lib/types'
 
 export interface HeatmapCellProps {
-  levels: number[]
-  winds: number[]
+  levels: (number | null)[]
+  winds: (number | null)[]
 }
 
 export interface HeatmapGeo {

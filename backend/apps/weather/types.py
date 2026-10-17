@@ -31,12 +31,12 @@ class HourlySeries:
 
     point: GeoPoint
     times: list[datetime]
-    wind_mph: list[float]
-    wind_gust_mph: list[float]
-    rain_in: list[float]
-    snow_in: list[float]
-    temperature_f: list[float]
-    weather_code: list[int]
+    wind_mph: list[float | None]
+    wind_gust_mph: list[float | None]
+    rain_in: list[float | None]
+    snow_in: list[float | None]
+    temperature_f: list[float | None]
+    weather_code: list[int | None]
 
     def _index_of(self, stamp: datetime) -> int | None:
         if not self.times:
@@ -53,7 +53,8 @@ class HourlySeries:
 
         Precipitation and gusts come from the hour that contains ``when`` (the
         value stamped at the end of that hour); wind and temperature from the
-        nearest reading. Returns ``None`` when either is outside the series.
+        nearest reading. Returns ``None`` when either is outside the series or
+        any value the risk rules need (wind, rain, snow) is missing.
         """
         hour_start = floor_hour(when)
         hour_index = self._index_of(hour_start + HOUR)
@@ -61,10 +62,15 @@ class HourlySeries:
         reading_index = self._index_of(nearest)
         if hour_index is None or reading_index is None:
             return None
+        wind = self.wind_mph[reading_index]
+        rain = self.rain_in[hour_index]
+        snow = self.snow_in[hour_index]
+        if wind is None or rain is None or snow is None:
+            return None
         return WeatherSample(
-            wind_mph=self.wind_mph[reading_index],
-            rain_in_per_hr=self.rain_in[hour_index],
-            snow_in_per_hr=self.snow_in[hour_index],
+            wind_mph=wind,
+            rain_in_per_hr=rain,
+            snow_in_per_hr=snow,
             wind_gust_mph=self.wind_gust_mph[hour_index],
             temperature_f=self.temperature_f[reading_index],
             weather_code=self.weather_code[hour_index],

@@ -63,6 +63,8 @@ export interface RouteSummary {
   no_travel_miles: number
   severe_miles: number
   high_miles: number
+  /** Miles represented by checkpoints without a forecast. */
+  unknown_miles: number
   miles_by_level: Record<RiskLevel, number>
 }
 
@@ -101,8 +103,9 @@ export interface TripPlan {
 export interface HeatmapPoint {
   lat: number
   lon: number
-  levels: number[]
-  wind_mph: number[]
+  /** Risk level per hour (0 = Low ... 4 = No Travel); null where no forecast exists. */
+  levels: (number | null)[]
+  wind_mph: (number | null)[]
 }
 
 export interface Heatmap {

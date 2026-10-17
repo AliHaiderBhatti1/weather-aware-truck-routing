@@ -22,7 +22,7 @@ from apps.geo.simplify import simplify
 from apps.geo.types import Checkpoint, GeoPoint, Place, Route
 from apps.risk.engine import RiskAssessment, WeatherSample, assess
 from apps.risk.levels import RiskLevel
-from apps.risk.ranking import RiskSegment, rank_routes, summarize_route
+from apps.risk.ranking import RiskSegment, RouteRiskSummary, rank_routes, summarize_route
 from apps.trips.services.timing import StageTimer
 from apps.weather.service import WeatherService
 
@@ -93,22 +93,22 @@ class TripPlanner:
                 route.id,
                 route.duration_s,
                 [
-                    RiskSegment(item.risk.level, item.checkpoint.segment_miles)
+                    RiskSegment(
+                        item.risk.level if item.risk is not None else None,
+                        item.checkpoint.segment_miles,
+                    )
                     for item in assessed[route.id]
-                    if item.risk is not None
                 ],
             )
             for route in routes
         ]
-        ranked = {item.summary.route_id: item for item in rank_routes(summaries)}
+        ordered = rank_routes(summaries)
+        ranked = {item.summary.route_id: item for item in ordered}
 
         warnings = self._warnings(routes, assessed)
-        recommended = next((r for r in ranked.values() if r.recommended), None)
+        recommended = next((r for r in ordered if r.recommended), None)
         if recommended is None:
-            warnings.append(
-                "Every route contains No-Travel conditions at the planned departure time. "
-                "Consider delaying the trip."
-            )
+            warnings.append(_no_recommendation_reason(ordered[0].summary))
 
         route_payloads = sorted(
             (
@@ -169,13 +169,25 @@ class TripPlanner:
                 f"Only {count} distinct route{'s exist' if count != 1 else ' exists'} "
                 "between these places."
             )
-        missing = sum(1 for items in assessed.values() for item in items if item.weather is None)
+        missing = sum(1 for items in assessed.values() for item in items if item.risk is None)
         if missing:
             warnings.append(
                 f"Forecast data was unavailable for {missing} checkpoint(s); "
-                "they are excluded from risk totals."
+                "their miles are shown as unknown rather than assumed safe."
             )
         return warnings
+
+
+def _no_recommendation_reason(best: RouteRiskSummary) -> str:
+    if not best.is_travel_advised:
+        return (
+            "Every route contains No-Travel conditions at the planned departure time. "
+            "Consider delaying the trip."
+        )
+    return (
+        "Forecasts don't cover enough of any route to recommend one. "
+        "Choose a departure closer to now."
+    )
 
 
 # -- serialisation helpers ---------------------------------------------------
@@ -220,6 +232,7 @@ def _serialize_route(
             "no_travel_miles": round(summary.no_travel_miles, 1),
             "severe_miles": round(summary.severe_miles, 1),
             "high_miles": round(summary.high_miles, 1),
+            "unknown_miles": round(summary.unknown_miles, 1),
             "miles_by_level": {
                 level.slug: round(miles, 1) for level, miles in summary.miles_by_level.items()
             },

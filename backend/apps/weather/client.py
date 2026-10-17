@@ -168,25 +168,31 @@ def _parse_series(point: GeoPoint, entry: Any) -> HourlySeries:
     times = [_parse_time(value) for value in hourly.get("time", [])]
     count = len(times)
 
-    def floats(name: str) -> list[float]:
-        values = hourly.get(name) or []
-        return [float(v) if v is not None else 0.0 for v in values][:count] + [0.0] * max(
-            0, count - len(values)
-        )
+    def values(name: str) -> list[float | None]:
+        # Missing values stay None: a gap in the forecast is unknown, not calm.
+        raw = list(hourly.get(name) or [])[:count]
+        raw += [None] * (count - len(raw))
+        return [float(v) if v is not None else None for v in raw]
 
-    rain = [a + b for a, b in zip(floats("rain"), floats("showers"), strict=True)]
-    codes = hourly.get("weather_code") or []
+    rain = [_add_present(a, b) for a, b in zip(values("rain"), values("showers"), strict=True)]
+    codes = values("weather_code")
     return HourlySeries(
         point=point,
         times=times,
-        wind_mph=floats("wind_speed_10m"),
-        wind_gust_mph=floats("wind_gusts_10m"),
+        wind_mph=values("wind_speed_10m"),
+        wind_gust_mph=values("wind_gusts_10m"),
         rain_in=rain,
-        snow_in=floats("snowfall"),
-        temperature_f=floats("temperature_2m"),
-        weather_code=[int(c) if c is not None else 0 for c in codes][:count]
-        + [0] * max(0, count - len(codes)),
+        snow_in=values("snowfall"),
+        temperature_f=values("temperature_2m"),
+        weather_code=[int(c) if c is not None else None for c in codes],
     )
+
+
+def _add_present(a: float | None, b: float | None) -> float | None:
+    """Sum of the values that are present; None only when both are missing."""
+    if a is None and b is None:
+        return None
+    return (a or 0.0) + (b or 0.0)
 
 
 def _format_hour(moment: datetime) -> str:

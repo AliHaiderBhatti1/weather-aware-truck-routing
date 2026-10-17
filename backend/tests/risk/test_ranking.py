@@ -61,7 +61,7 @@ def test_no_travel_miles_disqualify_a_route_from_recommendation() -> None:
 
     assert [r.summary.route_id for r in ranked] == ["severe", "stop"]
     assert ranked[0].recommended
-    assert ranked[0].reasons == ["no No-Travel miles vs. stop"]
+    assert ranked[0].reasons == ["no No-Travel conditions vs. stop"]
 
 
 def test_nothing_is_recommended_when_every_route_has_no_travel_miles() -> None:
@@ -78,3 +78,35 @@ def test_single_route_is_recommended_without_reasons() -> None:
     ranked = rank_routes([summarize_route("only", 10, [RiskSegment(LOW, 10)])])
     assert ranked[0].recommended
     assert ranked[0].reasons == []
+
+
+def test_unknown_miles_are_tracked_and_excluded_from_the_average() -> None:
+    summary = summarize_route(
+        "a", 10, [RiskSegment(SEV, 10), RiskSegment(None, 5), RiskSegment(LOW, 10)]
+    )
+    assert summary.unknown_miles == 5
+    assert summary.total_miles == 20  # known miles only
+    assert summary.average_risk == (3 * 10) / 20
+    assert summary.is_sufficiently_forecast  # 5 of 25 miles = 20%
+
+
+def test_routes_with_large_forecast_gaps_rank_below_assessed_routes_and_are_not_recommended() -> (
+    None
+):
+    # The gappy route looks perfect on the miles it knows about...
+    gappy = summarize_route("gappy", 10, [RiskSegment(None, 60), RiskSegment(LOW, 40)])
+    stormy = summarize_route("stormy", 10, [RiskSegment(SEV, 30), RiskSegment(LOW, 70)])
+
+    ranked = rank_routes([gappy, stormy])
+
+    # ...but 60% unknown could hide anything, so the fully forecast route wins.
+    assert [r.summary.route_id for r in ranked] == ["stormy", "gappy"]
+    assert ranked[0].reasons == ["forecast available for the whole route vs. gappy"]
+    assert ranked[0].recommended
+
+
+def test_nothing_is_recommended_when_no_route_is_sufficiently_forecast() -> None:
+    a = summarize_route("a", 10, [RiskSegment(None, 90), RiskSegment(LOW, 10)])
+    b = summarize_route("b", 20, [RiskSegment(None, 100)])
+    ranked = rank_routes([a, b])
+    assert not any(r.recommended for r in ranked)

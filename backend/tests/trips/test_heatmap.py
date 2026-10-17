@@ -51,3 +51,25 @@ def test_build_heatmap_emits_levels_per_hour_for_each_point() -> None:
     # 08:00-14:00 calm (0 = Low); 15:00 onwards 40 mph + 45k lb load -> Severe (3)
     assert first["levels"][0] == 0
     assert first["levels"][7] == 3
+
+
+def test_hours_without_a_forecast_are_unknown_not_low() -> None:
+    route = straight_route("r", total_miles=60, lat=0.0)
+    plan = TripPlanner(geo=FakeGeo([route]), weather=FakeWeather(calm)).plan(  # type: ignore[arg-type]
+        PlanRequest(
+            Place("A", "A", GeoPoint(0, 0)),
+            Place("B", "B", GeoPoint(0, 1)),
+            datetime(2026, 10, 20, 8, 30, tzinfo=UTC),
+            20_000,
+            25,
+        )
+    )
+
+    def gap_after_noon(point: GeoPoint, when: datetime) -> WeatherSample | None:
+        return None if when.hour >= 12 else calm(point, when)
+
+    heatmap = build_heatmap(plan, weather=FakeWeather(gap_after_noon), max_points=10)  # type: ignore[arg-type]
+
+    levels = heatmap["points"][0]["levels"]
+    assert levels[0] == 0  # 08:00, known and calm
+    assert levels[5] is None  # 13:00, no forecast

@@ -69,7 +69,7 @@ export function RouteCard({ route, selected, onSelect }: RouteCardProps) {
           </div>
         </div>
 
-        <RiskBar milesByLevel={summary.miles_by_level} totalMiles={route.distance_miles} />
+        <RiskBar milesByLevel={summary.miles_by_level} unknownMiles={summary.unknown_miles} />
 
         <dl className="grid grid-cols-4 gap-2 text-center">
           <Metric
