@@ -34,14 +34,15 @@ every route option and scoring wind, rain and snow against the load.
 
 Load overrides: wind ≥ 55 mph → No Travel for any load · 45–54 mph with load > 30,000 lb → No Travel · 35–44 mph with load > 40,000 lb → Severe.
 
-A checkpoint's level is the worst of wind, rain, snow and the load override. Each checkpoint governs the miles to the next one, which is how "Severe miles" and "High miles" are accumulated. The engine lives in [`backend/apps/risk`](backend/apps/risk) and is covered by table-driven tests for every boundary.
+A checkpoint's level is the worst of wind, rain, snow and the load override. Each checkpoint represents the road half-way to its neighbours (so the origin and destination cover half a stretch each), which is how "Severe miles" and "High miles" are accumulated and how the map colours the selected route. The engine lives in [`backend/apps/risk`](backend/apps/risk) and is covered by table-driven tests for every boundary.
 
 ### Assumptions I made explicit
 
-- **No Travel is treated as worse than Severe.** The brief's preference ladder starts at Severe miles; I sort No-Travel miles first and never recommend a route that contains any. If every route does, the UI says so instead of picking one.
+- **No Travel is treated as worse than Severe.** The brief's preference ladder starts at Severe miles; a route with any No-Travel checkpoint (including the arrival point) sorts last and is never recommended. If every route has one, the UI says so instead of picking one.
+- **Missing forecasts are unknown, never calm.** Checkpoints without a forecast count as unknown miles, are excluded from the average, and a route with more than 25% unknown miles ranks below fully forecast routes and isn't recommended.
 - **Boundaries are lower-inclusive** (25 mph is Moderate, 0.25 in/hr is High). For the top band I follow the brief literally: wind ≥ 55 is No Travel, but rain 1.00 and snow 3.0 are still Severe.
 - **Rain rate = Open-Meteo `rain + showers`** so convective rain counts. Sustained wind (`wind_speed_10m`) drives the rules; gusts are shown for context only.
-- **Hourly buckets.** Open-Meteo reports hourly accumulations, so a checkpoint uses the hour containing its ETA (no interpolation between hours).
+- **Hourly buckets.** Open-Meteo stamps rain, snow and gusts at the end of the hour they cover, so a checkpoint reads the value for the hour containing its ETA (e.g. 02:30 reads the 03:00 stamp, covering 02:00-03:00) and the nearest instantaneous wind reading. No interpolation between hours.
 - **"Three routes" is best effort.** Mapbox returns at most two alternatives and often fewer on long trips, so I top up with toll-free and motorway-free variants and drop near-duplicates by corridor overlap. If fewer than three distinct routes exist the response says so.
 
 ## Architecture
@@ -95,7 +96,7 @@ Every `POST /api/trips/` response carries a `Server-Timing` header (visible in D
 | weather | 0.7–1 s | All checkpoints of all routes, de-duplicated and fetched from Open-Meteo in small concurrent chunks |
 | everything else | < 0.2 s | Sampling, risk scoring, ranking, RDP simplification, persistence |
 
-Repeated plans for the same corridor are served from cache (routes 1 h, weather 15 min). Open-Meteo occasionally has slow or overloaded spells; the client retries transient failures with backoff and the UI shows staged progress so a 10 s plan still feels alive. The heatmap is fetched separately after the plan renders, so it never delays the first paint.
+Repeated plans for the same corridor are served from cache (routes and weather for 1 h; forecast models update about hourly). Open-Meteo's free tier has slow spells and caps concurrent requests, so the client keeps at most 3 requests in flight, retries transient failures once with jittered backoff, and degrades instead of failing: checkpoints it couldn't fetch become unknown with an explicit warning, and a partial heatmap is shown but not stored. The UI shows staged progress so a slow plan still feels alive. The heatmap is fetched separately after the plan renders, so it never delays the first paint.
 
 ## API
 
@@ -156,7 +157,7 @@ cd backend  && ruff check . && ruff format --check . && mypy . && pytest --cov
 cd frontend && npm run check    # oxlint + tsc + vitest + prettier
 ```
 
-112 backend tests cover every threshold boundary, the load rules, ranking tie-breaks, checkpoint interpolation, route de-duplication, provider parsing (mocked HTTP), the planner end-to-end with fakes, and the API contract. Frontend tests cover the form validation, request mapping, GeoJSON builders, geometry splitting and formatting. CI runs all of it plus a Docker build on every push.
+150 backend tests cover every threshold boundary, the load rules, ranking tie-breaks, checkpoint interpolation, route de-duplication, provider parsing (mocked HTTP), the planner end-to-end with fakes, and the API contract. Frontend tests cover the form validation, request mapping, GeoJSON builders, geometry splitting and formatting. CI runs all of it plus a Docker build on every push.
 
 ## Deployment
 
